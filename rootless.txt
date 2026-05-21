@@ -1,0 +1,414 @@
+```bash id="final_rootless_http_rhel9_documented"
+#!/bin/bash
+
+# ==========================================================
+# ROOTLESS HTTP CONTAINER SETUP - RHEL 9
+# ==========================================================
+#
+# PURPOSE:
+# --------
+# This script configures a modern rootless HTTP container
+# using Podman on RHEL 9.
+#
+# FEATURES:
+# ---------
+# ✔ Rootless container (non-root user)
+# ✔ Nginx HTTP server container
+# ✔ Auto-start after reboot
+# ✔ systemd user service integration
+# ✔ Firewall configuration
+# ✔ VMware external access support
+#
+# TECHNOLOGIES:
+# -------------
+# Podman  -> Container runtime
+# Nginx   -> Web server
+# systemd -> Service auto-start management
+#
+# ACCESS URL:
+# -----------
+# Local VM:
+#   http://localhost:8090
+#
+# External access:
+#   http://<VM-IP>:8090
+#
+# IMPORTANT:
+# ----------
+# Run this script as NORMAL USER.
+#
+# DO NOT RUN:
+#   sudo ./setup.sh
+#
+# CORRECT:
+#   ./setup.sh
+#
+# ==========================================================
+
+set -e
+
+echo "================================================="
+echo " ROOTLESS HTTP CONTAINER SETUP - RHEL 9 "
+echo "================================================="
+
+# ==========================================================
+# STEP 1 - PREVENT ROOT EXECUTION
+# ==========================================================
+#
+# Rootless Podman MUST run as normal user.
+# Running with sudo/root breaks:
+#   - systemd user services
+#   - rootless networking
+#   - user session handling
+#
+# ==========================================================
+
+if [ "$EUID" -eq 0 ]; then
+  echo
+  echo "ERROR:"
+  echo "Do NOT run this script with sudo/root."
+  echo
+  echo "Run as normal user:"
+  echo "  ./setup.sh"
+  echo
+  exit 1
+fi
+
+# ==========================================================
+# STEP 2 - INSTALL REQUIRED PACKAGES
+# ==========================================================
+#
+# podman         -> Rootless container engine
+# slirp4netns    -> Rootless container networking
+# fuse-overlayfs -> Rootless container filesystem layer
+# firewalld      -> Firewall management
+#
+# ==========================================================
+
+echo
+echo "STEP 1 - Installing required packages"
+
+sudo dnf install -y \
+  podman \
+  slirp4netns \
+  fuse-overlayfs \
+  firewalld
+
+# ==========================================================
+# STEP 3 - ENABLE FIREWALL SERVICE
+# ==========================================================
+#
+# firewalld must run to allow external access.
+#
+# enable --now:
+#   enable -> start on every boot
+#   now    -> start immediately
+#
+# ==========================================================
+
+echo
+echo "STEP 2 - Starting firewalld"
+
+sudo systemctl enable --now firewalld
+
+# ==========================================================
+# STEP 4 - CONFIGURE ROOTLESS UID/GID MAPPING
+# ==========================================================
+#
+# Rootless containers require delegated UID/GID ranges.
+#
+# subuid/subgid allow Podman to create isolated user
+# namespaces securely without root privileges.
+#
+# Example:
+#   user inside container ≠ host root user
+#
+# ==========================================================
+
+echo
+echo "STEP 3 - Checking rootless UID/GID mapping"
+
+if ! grep -q "^$USER:" /etc/subuid; then
+  echo "Adding subuid range for $USER"
+  sudo usermod --add-subuids 100000-165535 $USER
+fi
+
+if ! grep -q "^$USER:" /etc/subgid; then
+  echo "Adding subgid range for $USER"
+  sudo usermod --add-subgids 100000-165535 $USER
+fi
+
+# ==========================================================
+# STEP 5 - ENABLE USER LINGER
+# ==========================================================
+#
+# loginctl enable-linger:
+#
+# Keeps user systemd services running even after:
+#   - logout
+#   - reboot
+#
+# REQUIRED FOR:
+#   systemctl --user services
+#
+# ==========================================================
+
+echo
+echo "STEP 4 - Enabling user linger"
+
+loginctl enable-linger $USER || true
+
+# ==========================================================
+# STEP 6 - FIX USER SYSTEMD RUNTIME
+# ==========================================================
+#
+# systemctl --user requires:
+#   XDG_RUNTIME_DIR
+#
+# Without this variable you may get:
+#   Failed to connect to bus
+#
+# ==========================================================
+
+echo
+echo "STEP 5 - Configuring systemd user runtime"
+
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+
+# ==========================================================
+# STEP 7 - REMOVE OLD CONTAINER
+# ==========================================================
+#
+# Removes previous container if script is re-run.
+#
+# rm -f:
+#   remove forcefully
+#
+# 2>/dev/null:
+#   hide errors if container doesn't exist
+#
+# ==========================================================
+
+echo
+echo "STEP 6 - Removing old container if exists"
+
+podman rm -f web 2>/dev/null || true
+
+# ==========================================================
+# STEP 8 - PULL NGINX IMAGE
+# ==========================================================
+#
+# Pull latest nginx container image from Docker Hub.
+#
+# nginx:
+#   lightweight modern HTTP server
+#
+# ==========================================================
+
+echo
+echo "STEP 7 - Pulling nginx image"
+
+podman pull docker.io/library/nginx:latest
+
+# ==========================================================
+# STEP 9 - START ROOTLESS HTTP CONTAINER
+# ==========================================================
+#
+# podman run:
+#   starts container
+#
+# -d:
+#   detached/background mode
+#
+# --name web:
+#   container name
+#
+# -p 0.0.0.0:8090:80
+#
+# FORMAT:
+#   hostIP:hostPort:containerPort
+#
+# hostPort:
+#   8090
+#
+# containerPort:
+#   80 (nginx web server)
+#
+# 0.0.0.0:
+#   allows external network access
+#
+# ==========================================================
+
+echo
+echo "STEP 8 - Starting rootless nginx container"
+
+podman run -d \
+  --name web \
+  -p 0.0.0.0:8090:80 \
+  docker.io/library/nginx:latest
+
+# ==========================================================
+# STEP 10 - GENERATE SYSTEMD SERVICE
+# ==========================================================
+#
+# podman generate systemd:
+#   converts container into systemd service
+#
+# BENEFIT:
+#   auto-start after reboot
+#
+# --new:
+#   recreates container safely after reboot
+#
+# ==========================================================
+
+echo
+echo "STEP 9 - Generating systemd service file"
+
+rm -f container-web.service
+
+podman generate systemd \
+  --name web \
+  --files \
+  --new
+
+# ==========================================================
+# STEP 11 - INSTALL USER SYSTEMD SERVICE
+# ==========================================================
+#
+# ~/.config/systemd/user:
+#   user-level systemd service directory
+#
+# ==========================================================
+
+echo
+echo "STEP 10 - Installing user systemd service"
+
+mkdir -p ~/.config/systemd/user
+
+mv -f container-web.service ~/.config/systemd/user/
+
+# ==========================================================
+# STEP 12 - RELOAD SYSTEMD USER DAEMON
+# ==========================================================
+#
+# daemon-reload:
+#   refreshes systemd configuration
+#
+# REQUIRED after adding new service files
+#
+# ==========================================================
+
+echo
+echo "STEP 11 - Reloading systemd user daemon"
+
+systemctl --user daemon-reload
+
+# ==========================================================
+# STEP 13 - ENABLE AUTO-START AFTER REBOOT
+# ==========================================================
+#
+# enable:
+#   start automatically during boot/login
+#
+# ==========================================================
+
+echo
+echo "STEP 12 - Enabling auto-start after reboot"
+
+systemctl --user enable container-web.service
+
+# ==========================================================
+# STEP 14 - START CONTAINER SERVICE
+# ==========================================================
+#
+# restart:
+#   starts service immediately
+#
+# ==========================================================
+
+echo
+echo "STEP 13 - Starting container service"
+
+systemctl --user restart container-web.service
+
+# ==========================================================
+# STEP 15 - OPEN FIREWALL PORT
+# ==========================================================
+#
+# Opens external access to:
+#   TCP port 8090
+#
+# --permanent:
+#   survives reboot
+#
+# ==========================================================
+
+echo
+echo "STEP 14 - Opening firewall port 8090"
+
+sudo firewall-cmd \
+  --permanent \
+  --add-port=8090/tcp
+
+sudo firewall-cmd --reload
+
+# ==========================================================
+# STEP 16 - DETECT VM IP ADDRESS
+# ==========================================================
+#
+# hostname -I:
+#   displays system IP addresses
+#
+# awk '{print $1}':
+#   selects primary IP
+#
+# ==========================================================
+
+echo
+echo "STEP 15 - Detecting VM IP"
+
+VM_IP=$(hostname -I | awk '{print $1}')
+
+# ==========================================================
+# STEP 17 - FINAL STATUS
+# ==========================================================
+
+echo
+echo "================================================="
+echo " SETUP COMPLETED SUCCESSFULLY "
+echo "================================================="
+
+echo
+echo "RUNNING CONTAINERS:"
+podman ps
+
+echo
+echo "LOCAL ACCESS:"
+echo "  http://localhost:8090"
+
+echo
+echo "EXTERNAL ACCESS:"
+echo "  http://$VM_IP:8090"
+
+echo
+echo "VERIFY SERVICE:"
+echo "  systemctl --user status container-web.service"
+
+echo
+echo "AUTO-START AFTER REBOOT:"
+echo "  ENABLED"
+
+echo
+echo "IMPORTANT VMWARE SETTING:"
+echo "  Use BRIDGED network adapter mode"
+
+echo
+echo "TEST AFTER REBOOT:"
+echo "  curl http://localhost:8090"
+
+echo
+echo "================================================="
+echo " ROOTLESS NGINX CONTAINER IS READY "
+echo "================================================="
+```
