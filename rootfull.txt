@@ -1,0 +1,43 @@
+#!/bin/bash
+
+set -e
+
+echo "=== ROOTFUL PODMAN NGINX SETUP ==="
+
+# 1. Must run as root
+if [ "$EUID" -ne 0 ]; then
+  echo "Run this script with sudo/root"
+  exit 1
+fi
+
+# 2. Install packages
+dnf install -y podman firewalld
+
+systemctl enable --now firewalld
+
+# 3. Remove old container
+podman rm -f web 2>/dev/null || true
+
+# 4. Run container (rootful)
+podman run -d \
+  --name web \
+  -p 0.0.0.0:8090:80 \
+  docker.io/library/nginx:latest
+
+# 5. Generate systemd service (ROOT system service, NOT user)
+podman generate systemd --name web --files --new
+
+# 6. Move service to system directory
+mv container-web.service /etc/systemd/system/
+
+# 7. Enable system service
+systemctl daemon-reload
+systemctl enable container-web.service
+systemctl start container-web.service
+
+# 8. Firewall
+firewall-cmd --permanent --add-port=8090/tcp
+firewall-cmd --reload
+
+# 9. Done
+echo "Access: http://localhost:8090"
