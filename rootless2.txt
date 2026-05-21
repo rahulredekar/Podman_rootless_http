@@ -1,0 +1,92 @@
+
+podman run -d --name web -p 8090:80 -v /mydata:/usr/share/nginx/html nginx
+
+Good question 👍
+
+No — you don’t strictly need to write `:latest`.
+
+---
+
+# 🧠 What happens if you skip `:tag`
+
+When you run:
+
+```bash id="a1"
+podman run nginx
+```
+
+It automatically becomes:
+
+```text id="a2"
+nginx:latest
+```
+
+So this command:
+
+```bash id="a3"
+podman run -d --name web -p 8090:80 -v /mydata:/usr/share/nginx/html nginx
+```
+
+👉 is exactly the same as:
+
+```bash id="a4"
+podman run -d --name web -p 8090:80 -v /mydata:/usr/share/nginx/html nginx:latest
+```
+
+---
+
+# ⚠️ Why people still write `:latest`
+
+Because it makes things clearer:
+
+| Case           | Meaning                                    |
+| -------------- | ------------------------------------------ |
+| `nginx`        | defaults to latest                         |
+| `nginx:latest` | explicitly latest version                  |
+| `nginx:1.25`   | fixed version (recommended for production) |
+
+---
+
+# 🚀 Best practice (important)
+
+## For testing (OK)
+
+```bash id="b1"
+nginx
+```
+
+## For production (BEST)
+
+```bash id="b2"
+nginx:1.25
+```
+
+👉 Why?
+
+* avoids unexpected updates
+* stable behavior
+* safer deployments
+
+---
+
+# 🧠 Simple rule
+
+```text id="c1"
+nginx = shorthand for nginx:latest
+```
+
+---
+
+# 🟢 Final answer
+
+👉 Yes, your command is correct without `:latest`
+👉 It automatically uses latest tag
+
+```bash id="d1"
+podman run -d --name web -p 8090:80 -v /mydata:/usr/share/nginx/html nginx
+```
+
+---
+
+If you want, I can show you:
+👉 “how version tagging works in containers (very important for DevOps & production stability)”
