@@ -1,0 +1,192 @@
+Here is your **ONE-SCREEN COMPLETE SSH LOCAL PORT FORWARDING CHEAT SHEET (step-by-step + all commands + meaning)**
+
+---
+
+# 🔐 SSH LOCAL PORT FORWARDING — FULL CHEAT SHEET
+
+---
+
+# 🧭 STEP 1 — Login to remote server (check service)
+
+```bash id="a1"
+ssh user@DB_SERVER_IP
+```
+
+```bash id="a2"
+ss -tulnp | grep 5432
+```
+
+✔ Confirms PostgreSQL is running on remote server
+
+---
+
+# 🧭 STEP 2 — Ensure DB is NOT exposed (best practice)
+
+On DB server:
+
+```text id="a3"
+postgresql.conf:
+listen_addresses = 'localhost'
+```
+
+✔ DB only accessible inside server
+
+---
+
+# 🧭 STEP 3 — Firewall setup (secure production)
+
+```bash id="a4"
+sudo ufw allow 22/tcp
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+```
+
+✔ Only SSH is open to outside world
+✔ DB ports are blocked (5432 not exposed)
+
+---
+
+# 🧭 STEP 4 — BASIC LOCAL PORT FORWARDING (MAIN COMMAND)
+
+```bash id="a5"
+ssh -L 15432:localhost:5432 user@DB_SERVER_IP
+```
+
+---
+
+## 🧠 Meaning:
+
+| Part              | Meaning                   |
+| ----------------- | ------------------------- |
+| 15432             | Your local machine port   |
+| localhost         | Remote server itself      |
+| 5432              | PostgreSQL port on server |
+| user@DB_SERVER_IP | SSH login                 |
+
+---
+
+## 🔄 Flow:
+
+```text id="a6"
+Your Laptop:15432
+      ↓
+SSH Tunnel (port 22)
+      ↓
+Server:localhost:5432
+      ↓
+PostgreSQL DB
+```
+
+---
+
+# 🧭 STEP 5 — Connect to DB (HOT CONNECT)
+
+```bash id="a7"
+psql -h localhost -p 15432 -U postgres
+```
+
+✔ Treat remote DB like local DB
+
+---
+
+# 🧭 STEP 6 — Run tunnel in background
+
+```bash id="a8"
+ssh -f -N -L 15432:localhost:5432 user@DB_SERVER_IP
+```
+
+### Flags:
+
+| Flag | Meaning                |
+| ---- | ---------------------- |
+| `-f` | run in background      |
+| `-N` | no shell (tunnel only) |
+| `-L` | local forwarding       |
+
+---
+
+# 🧭 STEP 7 — Use different local port (if conflict)
+
+```bash id="a9"
+ssh -L 9999:localhost:5432 user@DB_SERVER_IP
+```
+
+Connect:
+
+```bash id="a10"
+psql -h localhost -p 9999 -U postgres
+```
+
+---
+
+# 🧭 STEP 8 — WEB APP EXAMPLE (nginx / Podman)
+
+```bash id="a11"
+ssh -L 9090:localhost:8090 user@SERVER_IP
+```
+
+Open:
+
+```text id="a12"
+http://localhost:9090
+```
+
+---
+
+# 🧭 STEP 9 — VERIFY TUNNEL
+
+```bash id="a13"
+ss -tulnp | grep 15432
+```
+
+or
+
+```bash id="a14"
+lsof -i :15432
+```
+
+✔ Confirms local port is active
+
+---
+
+# 🧭 STEP 10 — STOP TUNNEL
+
+```bash id="a15"
+pkill -f "ssh -L"
+```
+
+or close terminal
+
+---
+
+# 🔐 SECURITY SUMMARY
+
+✔ DB NOT exposed publicly
+✔ Only SSH (22) is open
+✔ All DB traffic is encrypted
+✔ Access is temporary (session-based)
+
+---
+
+# ❌ COMMON MISTAKES
+
+* ❌ Using `-l` instead of `-L`
+* ❌ Opening 5432 to internet
+* ❌ Thinking 15432 must be open on server
+* ❌ DB not running on server
+
+---
+
+# 🏁 FINAL RULE
+
+```text id="a16"
+SSH -L = Secure tunnel from local machine → remote service → localhost access
+```
+
+---
+
+If you want next, I can give you:
+✔ Reverse SSH (`-R`) one-page cheat sheet
+✔ Bastion host production architecture
+✔ AWS RDS secure connection diagram
+✔ or DevOps interview Q&A based on this topic
