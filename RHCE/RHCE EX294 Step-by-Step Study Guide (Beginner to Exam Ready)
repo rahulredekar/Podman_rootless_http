@@ -1,0 +1,915 @@
+# RHCE EX294 Complete Step-by-Step Detailed Command Guide
+
+This guide explains:
+
+* Every important command
+* Why it is used
+* What happens internally
+* RHCE exam usage
+* Real-world examples
+
+Focus areas:
+
+* Ansible
+* Inventory
+* Managed Nodes
+* Playbooks
+* Roles
+* Vault
+* Automation troubleshooting
+
+Official Docs:
+[Ansible Documentation](https://docs.ansible.com/?utm_source=chatgpt.com)
+
+---
+
+# PART 1 — Install Ansible
+
+# Step 1: Update System
+
+```bash id="d1"
+sudo dnf update -y
+```
+
+## Description
+
+* `dnf` → package manager
+* `update` → updates installed packages
+* `-y` → auto yes
+
+Why important?
+
+* Prevent dependency issues
+* Ensure latest repositories
+
+---
+
+# Step 2: Install Ansible Core
+
+```bash id="d2"
+sudo dnf install ansible-core -y
+```
+
+## Description
+
+Installs:
+
+* ansible command
+* ansible-playbook
+* ansible-galaxy
+* modules
+
+---
+
+# Step 3: Verify Installation
+
+```bash id="d3"
+ansible --version
+```
+
+## Example Output
+
+```bash id="d4"
+ansible [core 2.15]
+```
+
+## Important Details
+
+Shows:
+
+* version
+* python version
+* config path
+* module paths
+
+RHCE exam:
+You may need to verify installation before automation tasks.
+
+---
+
+# PART 2 — Configure SSH
+
+Ansible uses SSH to connect managed nodes.
+
+---
+
+# Step 4: Generate SSH Key
+
+```bash id="d5"
+ssh-keygen
+```
+
+## Description
+
+Creates:
+
+* public key
+* private key
+
+Files created:
+
+```bash id="d6"
+~/.ssh/id_rsa
+~/.ssh/id_rsa.pub
+```
+
+---
+
+# Step 5: Copy SSH Key
+
+```bash id="d7"
+ssh-copy-id student@node1
+```
+
+## Description
+
+Copies public key to:
+
+```bash id="d8"
+~/.ssh/authorized_keys
+```
+
+on target machine.
+
+Now passwordless login works.
+
+---
+
+# Step 6: Test SSH
+
+```bash id="d9"
+ssh student@node1
+```
+
+## Purpose
+
+Verify:
+
+* network connectivity
+* authentication
+* hostname resolution
+
+---
+
+# PART 3 — Inventory
+
+Inventory defines managed hosts.
+
+---
+
+# Step 7: Create Inventory File
+
+```bash id="d10"
+mkdir inventory
+vi inventory/hosts
+```
+
+Example:
+
+```ini id="d11"
+[web]
+node1
+
+[db]
+node2
+```
+
+---
+
+# Step 8: Understand Inventory Structure
+
+## Group
+
+```ini id="d12"
+[web]
+```
+
+means:
+
+* web = group name
+
+---
+
+## Hosts
+
+```ini id="d13"
+node1
+node2
+```
+
+means:
+managed servers.
+
+---
+
+# Step 9: Test Inventory
+
+```bash id="d14"
+ansible all -i inventory/hosts -m ping
+```
+
+## Command Breakdown
+
+| Part    | Meaning        |
+| ------- | -------------- |
+| ansible | main command   |
+| all     | all hosts      |
+| -i      | inventory file |
+| -m      | module         |
+| ping    | test module    |
+
+---
+
+# Step 10: Expected Output
+
+```bash id="d15"
+node1 | SUCCESS => {
+    "ping": "pong"
+}
+```
+
+## Meaning
+
+* SSH works
+* Python exists
+* Host reachable
+
+---
+
+# PART 4 — Ad-Hoc Commands
+
+Used for quick automation.
+
+---
+
+# Step 11: Run Linux Command
+
+```bash id="d16"
+ansible all -a "uptime"
+```
+
+## Description
+
+`-a`
+means:
+argument/command.
+
+Executes:
+
+```bash id="d17"
+uptime
+```
+
+on all servers.
+
+---
+
+# Step 12: Check Disk Space
+
+```bash id="d18"
+ansible all -a "df -h"
+```
+
+## Description
+
+Shows:
+
+* mounted filesystems
+* disk usage
+* available storage
+
+---
+
+# Step 13: Check Memory
+
+```bash id="d19"
+ansible all -a "free -m"
+```
+
+## Description
+
+Displays:
+
+* RAM
+* swap
+* memory usage
+
+---
+
+# Step 14: Install Package
+
+```bash id="d20"
+ansible all -m dnf -a "name=httpd state=present" --become
+```
+
+## Breakdown
+
+| Part          | Meaning         |
+| ------------- | --------------- |
+| dnf           | package module  |
+| name=httpd    | package         |
+| state=present | install package |
+| --become      | sudo/root       |
+
+---
+
+# Step 15: Start Service
+
+```bash id="d21"
+ansible all -m service -a "name=httpd state=started enabled=yes"
+```
+
+## Description
+
+| Parameter     | Meaning       |
+| ------------- | ------------- |
+| name          | service name  |
+| state=started | start service |
+| enabled=yes   | start at boot |
+
+---
+
+# Step 16: Create File
+
+```bash id="d22"
+ansible all -m file -a "path=/tmp/test state=touch"
+```
+
+## Description
+
+Creates empty file:
+
+```bash id="d23"
+/tmp/test
+```
+
+---
+
+# Step 17: Create Directory
+
+```bash id="d24"
+ansible all -m file -a "path=/opt/demo state=directory"
+```
+
+## Description
+
+Creates directory remotely.
+
+---
+
+# Step 18: Copy File
+
+```bash id="d25"
+ansible all -m copy -a "src=test.txt dest=/tmp/test.txt"
+```
+
+## Description
+
+Copies:
+
+* local file
+  → remote server
+
+---
+
+# Step 19: Remove File
+
+```bash id="d26"
+ansible all -m file -a "path=/tmp/test.txt state=absent"
+```
+
+## Description
+
+Deletes:
+
+* file
+* directory
+
+---
+
+# PART 5 — Playbooks
+
+Playbooks automate multiple tasks.
+
+---
+
+# Step 20: Create Playbook
+
+```bash id="d27"
+mkdir playbooks
+vi playbooks/apache.yml
+```
+
+---
+
+# Step 21: Write Playbook
+
+```yaml id="d28"
+---
+- name: Install Apache
+  hosts: web
+  become: yes
+
+  tasks:
+
+    - name: Install package
+      dnf:
+        name: httpd
+        state: present
+
+    - name: Start service
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+```
+
+---
+
+# Step 22: Understand YAML Structure
+
+## Play
+
+```yaml id="d29"
+- name:
+```
+
+Defines automation block.
+
+---
+
+## hosts
+
+```yaml id="d30"
+hosts: web
+```
+
+Target inventory group.
+
+---
+
+## become
+
+```yaml id="d31"
+become: yes
+```
+
+Run as root.
+
+---
+
+## tasks
+
+```yaml id="d32"
+tasks:
+```
+
+List of actions.
+
+---
+
+# Step 23: Run Playbook
+
+```bash id="d33"
+ansible-playbook -i inventory/hosts playbooks/apache.yml
+```
+
+---
+
+# Step 24: Syntax Check
+
+```bash id="d34"
+ansible-playbook apache.yml --syntax-check
+```
+
+## Purpose
+
+Checks:
+
+* YAML formatting
+* indentation
+* syntax errors
+
+---
+
+# Step 25: Dry Run
+
+```bash id="d35"
+ansible-playbook apache.yml --check
+```
+
+## Description
+
+Simulates changes without modifying system.
+
+Called:
+
+* check mode
+* dry run
+
+---
+
+# PART 6 — Variables
+
+Variables make playbooks reusable.
+
+---
+
+# Step 26: Create Variable
+
+```yaml id="d36"
+vars:
+  pkg: httpd
+```
+
+---
+
+# Step 27: Use Variable
+
+```yaml id="d37"
+name: "{{ pkg }}"
+```
+
+## Description
+
+`{{ }}`
+means:
+Jinja2 variable substitution.
+
+---
+
+# PART 7 — Facts
+
+Facts = system information.
+
+---
+
+# Step 28: Gather Facts
+
+```bash id="d38"
+ansible all -m setup
+```
+
+## Description
+
+Collects:
+
+* hostname
+* OS
+* memory
+* IP
+* CPU
+
+---
+
+# Step 29: Filter Facts
+
+```bash id="d39"
+ansible all -m setup -a "filter=ansible_distribution"
+```
+
+---
+
+# PART 8 — Loops
+
+Loops avoid repeating tasks.
+
+---
+
+# Step 30: Install Multiple Packages
+
+```yaml id="d40"
+- name: Install packages
+  dnf:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - httpd
+    - vsftpd
+    - mariadb
+```
+
+## Description
+
+`item`
+changes automatically:
+
+* httpd
+* vsftpd
+* mariadb
+
+---
+
+# PART 9 — Conditions
+
+---
+
+# Step 31: Conditional Task
+
+```yaml id="d41"
+when: ansible_distribution == "RedHat"
+```
+
+## Description
+
+Task executes only if condition true.
+
+---
+
+# PART 10 — Templates
+
+Templates create dynamic files.
+
+---
+
+# Step 32: Create Template
+
+```bash id="d42"
+mkdir templates
+vi templates/index.j2
+```
+
+Template:
+
+```jinja2 id="d43"
+Server Name: {{ ansible_hostname }}
+```
+
+---
+
+# Step 33: Deploy Template
+
+```yaml id="d44"
+- template:
+    src: index.j2
+    dest: /var/www/html/index.html
+```
+
+---
+
+# PART 11 — Handlers
+
+Handlers restart services only when needed.
+
+---
+
+# Step 34: Define Handler
+
+```yaml id="d45"
+handlers:
+  - name: restart apache
+    service:
+      name: httpd
+      state: restarted
+```
+
+---
+
+# Step 35: Notify Handler
+
+```yaml id="d46"
+notify: restart apache
+```
+
+---
+
+# PART 12 — Roles
+
+Roles organize automation.
+
+---
+
+# Step 36: Create Role
+
+```bash id="d47"
+ansible-galaxy init apache
+```
+
+---
+
+# Step 37: Role Structure
+
+```bash id="d48"
+apache/
+├── tasks/
+├── handlers/
+├── templates/
+├── vars/
+```
+
+---
+
+# Step 38: Add Role Task
+
+```yaml id="d49"
+# roles/apache/tasks/main.yml
+
+- name: Install Apache
+  dnf:
+    name: httpd
+    state: present
+```
+
+---
+
+# Step 39: Use Role
+
+```yaml id="d50"
+roles:
+  - apache
+```
+
+---
+
+# PART 13 — Vault
+
+Encrypt sensitive data.
+
+---
+
+# Step 40: Create Vault
+
+```bash id="d51"
+ansible-vault create secret.yml
+```
+
+---
+
+# Step 41: Edit Vault
+
+```bash id="d52"
+ansible-vault edit secret.yml
+```
+
+---
+
+# Step 42: View Vault
+
+```bash id="d53"
+ansible-vault view secret.yml
+```
+
+---
+
+# PART 14 — Troubleshooting
+
+---
+
+# Step 43: Verbose Output
+
+```bash id="d54"
+ansible all -m ping -vvv
+```
+
+## Description
+
+Shows:
+
+* SSH details
+* connection issues
+* module execution
+
+---
+
+# Step 44: Inventory Graph
+
+```bash id="d55"
+ansible-inventory --graph
+```
+
+---
+
+# Step 45: Show Config
+
+```bash id="d56"
+ansible-config dump --only-changed
+```
+
+---
+
+# PART 15 — Important RHCE Practice Tasks
+
+Practice daily:
+
+| Task          | Importance |
+| ------------- | ---------- |
+| Inventory     | Very High  |
+| Playbooks     | Critical   |
+| Roles         | Critical   |
+| Variables     | Very High  |
+| Templates     | Very High  |
+| Vault         | Very High  |
+| Service mgmt  | Critical   |
+| User creation | High       |
+| Firewall      | High       |
+
+---
+
+# PART 16 — Most Important Exam Commands
+
+```bash id="d57"
+ansible all -m ping
+ansible-playbook site.yml
+ansible-inventory --graph
+ansible-galaxy init apache
+ansible-vault create secret.yml
+ansible-doc service
+```
+
+---
+
+# PART 17 — Best Practice for RHCE Exam
+
+## During Exam
+
+✅ Read all questions first
+✅ Do easy tasks first
+✅ Verify every task
+✅ Use `--syntax-check`
+✅ Use roles properly
+✅ Avoid YAML indentation mistakes
+✅ Test services manually
+✅ Reboot-safe configurations
+
+---
+
+# PART 18 — Real RHCE Mini Project
+
+## Objective
+
+Automate:
+
+* Apache installation
+* Firewall configuration
+* Custom webpage deployment
+
+---
+
+## Task 1 — Install Apache
+
+```yaml id="d58"
+- dnf:
+    name: httpd
+    state: present
+```
+
+---
+
+## Task 2 — Start Service
+
+```yaml id="d59"
+- service:
+    name: httpd
+    state: started
+    enabled: yes
+```
+
+---
+
+## Task 3 — Open Firewall
+
+```yaml id="d60"
+- firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+```
+
+---
+
+## Task 4 — Deploy Webpage
+
+```yaml id="d61"
+- copy:
+    content: "Welcome RHCE"
+    dest: /var/www/html/index.html
+```
+
+---
+
+# Final RHCE Success Formula
+
+## Learn in this order:
+
+1. Linux basics
+2. SSH
+3. Inventory
+4. Ad-hoc commands
+5. Playbooks
+6. Variables
+7. Templates
+8. Roles
+9. Vault
+10. Troubleshooting
+
+---
+
+# Recommended Daily Practice
+
+| Time   | Practice        |
+| ------ | --------------- |
+| 1 hr   | Playbooks       |
+| 1 hr   | Roles           |
+| 30 min | Templates       |
+| 30 min | Troubleshooting |
+
