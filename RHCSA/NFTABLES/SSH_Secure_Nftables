@@ -1,0 +1,690 @@
+# nftables SSH Firewall Guide (Allow & Block SSH)
+
+For:
+
+* Red Hat Enterprise Linux
+* Ubuntu
+* OpenSSH
+* nftables
+
+This guide covers:
+
+* Allow SSH
+* Block SSH
+* IPv4 + IPv6
+* Secure vs insecure rules
+* Allow selected IP/subnet
+* SSH rate limiting
+* Interface-based SSH
+* Logging
+* Forward chain SSH
+* Advanced production security
+* Delete commands for every rule
+
+---
+
+# 1. What is SSH?
+
+SSH = Secure Shell
+
+Default port:
+
+```text
+22/TCP
+```
+
+Used for:
+
+* Remote Linux login
+* Server administration
+* SCP/SFTP
+* Tunnels
+
+---
+
+# 2. Check SSH Service
+
+## RHEL 9
+
+```bash
+sudo systemctl status sshd
+```
+
+---
+
+## Ubuntu 24.04
+
+```bash
+sudo systemctl status ssh
+```
+
+---
+
+# 3. Show Current nftables Rules
+
+```bash
+sudo nft list ruleset
+```
+
+---
+
+# 4. Show Rules with Handles (Needed for Delete)
+
+```bash
+sudo nft -a list ruleset
+```
+
+Example:
+
+```text
+tcp dport 22 accept # handle 15
+```
+
+Delete:
+
+```bash
+sudo nft delete rule inet filter input handle 15
+```
+
+---
+
+# 5. Allow SSH (Basic)
+
+## ✅ Secure Basic Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 accept
+```
+
+Description:
+
+* Allows SSH access
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 6. ❌ Insecure Alternative
+
+```bash
+sudo nft add rule inet filter input accept
+```
+
+Problem:
+
+* Opens ALL ports/services
+* Full firewall bypass
+
+---
+
+# Difference
+
+| Secure     | Insecure        |
+| ---------- | --------------- |
+| SSH only   | Everything open |
+| Controlled | No protection   |
+
+---
+
+# 7. Block SSH
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 drop
+```
+
+Description:
+
+* Blocks incoming SSH
+
+WARNING:
+
+* Can lock you out remotely
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 8. Reject SSH Instead of Drop
+
+## ✅ Advanced Secure
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 reject
+```
+
+Description:
+
+* Actively refuses SSH
+* Faster client response
+
+---
+
+# Difference: DROP vs REJECT
+
+| DROP           | REJECT                 |
+| -------------- | ---------------------- |
+| Silent discard | Sends refusal          |
+| More stealthy  | Easier troubleshooting |
+| Slower timeout | Faster response        |
+
+---
+
+# 9. Allow SSH From Specific IPv4 Address
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.1.100 tcp dport 22 accept
+```
+
+Description:
+
+* Only trusted IP can SSH
+
+---
+
+## Block Others
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 drop
+```
+
+---
+
+## Delete Rules
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 10. Allow SSH From Specific IPv6 Address
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input ip6 saddr 2001:db8::10 tcp dport 22 accept
+```
+
+---
+
+## Block Others
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 drop
+```
+
+---
+
+## Delete Rules
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 11. Allow SSH From Subnet
+
+## IPv4
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.1.0/24 tcp dport 22 accept
+```
+
+---
+
+## IPv6
+
+```bash
+sudo nft add rule inet filter input ip6 saddr 2001:db8::/64 tcp dport 22 accept
+```
+
+Description:
+
+* Allows SSH from trusted network
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 12. ❌ Insecure SSH Access
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 accept
+```
+
+Problem:
+
+* Entire internet can attempt SSH
+* Brute-force attacks possible
+
+---
+
+# ✅ Better Alternative
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.1.0/24 tcp dport 22 accept
+```
+
+---
+
+# Difference
+
+| Secure               | Insecure        |
+| -------------------- | --------------- |
+| Trusted network only | Entire internet |
+
+---
+
+# 13. SSH Rate Limiting (IMPORTANT)
+
+## ✅ Production Secure Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 ct state new limit rate 5/minute accept
+```
+
+Description:
+
+* Limits brute-force attempts
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 14. ❌ Insecure No-Limit Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 accept
+```
+
+Problem:
+
+* Unlimited attack attempts
+
+---
+
+# Difference
+
+| Secure                | Insecure           |
+| --------------------- | ------------------ |
+| Brute-force protected | Unlimited attempts |
+
+---
+
+# 15. SSH Interface-Based Security
+
+Example:
+
+* LAN interface = eth1
+* WAN interface = eth0
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input iif "eth1" tcp dport 22 accept
+```
+
+Description:
+
+* SSH only from LAN
+
+---
+
+## ❌ Insecure
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 accept
+```
+
+Problem:
+
+* Internet-wide SSH exposure
+
+---
+
+# Difference
+
+| Secure   | Insecure        |
+| -------- | --------------- |
+| LAN-only | Public internet |
+
+---
+
+# 16. Allow Established SSH Connections
+
+## ✅ Important Secure Rule
+
+```bash
+sudo nft add rule inet filter input ct state established,related accept
+```
+
+Description:
+
+* Keeps active SSH sessions alive
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 17. Log SSH Attempts
+
+## ✅ Secure Monitoring
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 log prefix "SSH: " accept
+```
+
+Description:
+
+* Logs SSH activity
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 18. Block SSH Brute Force Aggressively
+
+## ✅ Advanced Security
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 ct state new limit rate over 10/minute drop
+```
+
+Description:
+
+* Drops excessive login attempts
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 19. Forward Chain SSH Rules
+
+Used when Linux system acts as router/firewall.
+
+---
+
+## Allow Forwarded SSH
+
+```bash
+sudo nft add rule inet filter forward tcp dport 22 accept
+```
+
+---
+
+## Block Forwarded SSH
+
+```bash
+sudo nft add rule inet filter forward tcp dport 22 drop
+```
+
+---
+
+## Delete Rules
+
+```bash
+sudo nft delete rule inet filter forward handle <ID>
+```
+
+---
+
+# 20. Port Knocking Style SSH Restriction (Advanced)
+
+## Allow temporary SSH after trusted source
+
+Example concept:
+
+* Allow only admin IP
+
+```bash
+sudo nft add rule inet filter input ip saddr 203.0.113.10 tcp dport 22 accept
+```
+
+Description:
+
+* Simpler alternative to port knocking
+* Stronger than open SSH
+
+---
+
+# 21. SSH on Custom Port
+
+Example:
+
+```text
+2222
+```
+
+## Allow custom SSH
+
+```bash
+sudo nft add rule inet filter input tcp dport 2222 accept
+```
+
+---
+
+## Block old port 22
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 drop
+```
+
+---
+
+# Difference
+
+| Secure-ish        | Less Secure          |
+| ----------------- | -------------------- |
+| Non-standard port | Default port exposed |
+
+NOTE:
+
+* Security through obscurity only
+* Not replacement for real security
+
+---
+
+# 22. Full Secure Production SSH Setup
+
+## Recommended Rules
+
+```bash
+sudo nft flush ruleset
+
+sudo nft add table inet filter
+
+sudo nft add chain inet filter input '{ type filter hook input priority 0 ; policy drop ; }'
+
+sudo nft add rule inet filter input iif lo accept
+
+sudo nft add rule inet filter input ct state established,related accept
+
+sudo nft add rule inet filter input ip saddr 192.168.1.0/24 tcp dport 22 ct state new limit rate 5/minute accept
+
+sudo nft add rule inet filter input ip6 saddr 2001:db8::/64 tcp dport 22 ct state new limit rate 5/minute accept
+```
+
+---
+
+# 23. Why This Production Setup is Secure
+
+| Feature            | Security Benefit       |
+| ------------------ | ---------------------- |
+| policy drop        | Default deny           |
+| localhost allowed  | Internal system works  |
+| established rule   | Stable SSH sessions    |
+| subnet restriction | Trusted users only     |
+| rate limit         | Brute-force protection |
+| IPv6 filtering     | Prevents IPv6 bypass   |
+
+---
+
+# 24. Dangerous SSH Mistakes
+
+❌ Allowing SSH from entire internet
+❌ No rate limiting
+❌ Forgetting IPv6 rules
+❌ Blocking SSH while connected remotely
+❌ Using `policy accept`
+❌ No `established,related` rule
+
+---
+
+# 25. Best Practice Recommendations
+
+✔ Restrict SSH to trusted IP/subnet
+✔ Use rate limiting
+✔ Use `policy drop`
+✔ Allow `established,related`
+✔ Monitor SSH logs
+✔ Use SSH keys instead of passwords
+✔ Consider custom SSH port
+✔ Disable root login in SSH config
+
+---
+
+# 26. SSH Hardening Outside nftables
+
+Edit:
+
+```text
+/etc/ssh/sshd_config
+```
+
+Recommended:
+
+```text
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+```
+
+Restart SSH:
+
+## RHEL
+
+```bash
+sudo systemctl restart sshd
+```
+
+## Ubuntu
+
+```bash
+sudo systemctl restart ssh
+```
+
+---
+
+# 27. Monitor SSH Activity
+
+## Live nftables monitor
+
+```bash
+sudo nft monitor
+```
+
+---
+
+## SSH logs
+
+## RHEL
+
+```bash
+sudo journalctl -u sshd -f
+```
+
+---
+
+## Ubuntu
+
+```bash
+sudo journalctl -u ssh -f
+```
+
+---
+
+# 28. Flush SSH Rules
+
+## Flush INPUT chain
+
+```bash
+sudo nft flush chain inet filter input
+```
+
+---
+
+## Flush ALL nftables rules
+
+```bash
+sudo nft flush ruleset
+```
+
+---
+
+# 29. Security Comparison Summary
+
+| Rule Type           | Secure | Insecure |
+| ------------------- | ------ | -------- |
+| Specific IP/subnet  | ✅      |          |
+| Rate limiting       | ✅      |          |
+| Interface filtering | ✅      |          |
+| policy drop         | ✅      |          |
+| Open internet SSH   |        | ❌        |
+| No limits           |        | ❌        |
+| No IPv6 filtering   |        | ❌        |
+
+---
+
+# Official Documentation
+
+* [nftables wiki](https://wiki.nftables.org/?utm_source=chatgpt.com)
+* [OpenSSH manual](https://man.openbsd.org/sshd?utm_source=chatgpt.com)
+* [Red Hat nftables docs](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/configuring_firewalls_and_packet_filters/getting-started-with-nftables_configuring-firewalls-and-packet-filters?utm_source=chatgpt.com)
+* [Ubuntu firewall guide](https://ubuntu.com/server/docs/security-firewall?utm_source=chatgpt.com)
