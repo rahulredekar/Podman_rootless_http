@@ -1,0 +1,701 @@
+Here’s a practical production-focused SSH hardening guide for both Red Hat Enterprise Linux and Ubuntu servers — starting from basic protection to advanced enterprise-grade hardening.
+
+---
+
+# 1. Check SSH Service Status
+
+## RHEL 9
+
+```bash
+sudo systemctl status sshd
+```
+
+## Ubuntu 24
+
+```bash
+sudo systemctl status ssh
+```
+
+Enable at boot:
+
+```bash
+sudo systemctl enable sshd
+```
+
+Ubuntu:
+
+```bash
+sudo systemctl enable ssh
+```
+
+---
+
+# 2. Install OpenSSH Server
+
+## RHEL 9
+
+```bash
+sudo dnf install openssh-server -y
+```
+
+## Ubuntu 24
+
+```bash
+sudo apt update
+sudo apt install openssh-server -y
+```
+
+---
+
+# 3. Backup SSH Config Before Changes
+
+```bash
+sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+```
+
+Production rule:
+
+* Always backup before editing
+* Always keep one active SSH session open
+
+---
+
+# 4. Edit SSH Configuration
+
+```bash
+sudo vi /etc/ssh/sshd_config
+```
+
+or
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+---
+
+# 5. Basic Secure SSH Settings
+
+Add or modify:
+
+```bash
+Port 2222
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+MaxAuthTries 3
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+UsePAM yes
+X11Forwarding no
+AllowTcpForwarding no
+```
+
+Description:
+
+| Setting                     | Purpose                          |
+| --------------------------- | -------------------------------- |
+| `Port 2222`                 | Reduce automated scans           |
+| `PermitRootLogin no`        | Disable root SSH login           |
+| `PasswordAuthentication no` | Force SSH key usage              |
+| `PubkeyAuthentication yes`  | Enable key-based auth            |
+| `MaxAuthTries 3`            | Limit brute-force attempts       |
+| `LoginGraceTime 30`         | Timeout unauthenticated sessions |
+| `X11Forwarding no`          | Disable GUI forwarding           |
+| `AllowTcpForwarding no`     | Prevent SSH tunnel abuse         |
+
+---
+
+# 6. Create SSH Key Pair
+
+On client machine:
+
+```bash
+ssh-keygen -t ed25519 -a 100
+```
+
+Recommended modern algorithm:
+
+* `ed25519`
+* Faster and stronger than RSA
+
+Files:
+
+```bash
+~/.ssh/id_ed25519
+~/.ssh/id_ed25519.pub
+```
+
+---
+
+# 7. Copy SSH Key to Server
+
+```bash
+ssh-copy-id -p 2222 user@server-ip
+```
+
+Manual method:
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+
+Paste into:
+
+```bash
+~/.ssh/authorized_keys
+```
+
+Correct permissions:
+
+```bash
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys
+```
+
+---
+
+# 8. Restart SSH Service
+
+## RHEL 9
+
+```bash
+sudo systemctl restart sshd
+```
+
+## Ubuntu 24
+
+```bash
+sudo systemctl restart ssh
+```
+
+Validate config before restart:
+
+```bash
+sudo sshd -t
+```
+
+Very important in production.
+
+---
+
+# 9. Configure Firewall
+
+## RHEL 9 (firewalld)
+
+Open custom SSH port:
+
+```bash
+sudo firewall-cmd --permanent --add-port=2222/tcp
+sudo firewall-cmd --reload
+```
+
+Remove default SSH:
+
+```bash
+sudo firewall-cmd --permanent --remove-service=ssh
+sudo firewall-cmd --reload
+```
+
+---
+
+## Ubuntu 24 (UFW)
+
+```bash
+sudo ufw allow 2222/tcp
+sudo ufw delete allow 22/tcp
+sudo ufw enable
+```
+
+Check:
+
+```bash
+sudo ufw status
+```
+
+---
+
+# 10. SELinux Configuration (RHEL 9)
+
+If changing SSH port:
+
+Check SELinux mode:
+
+```bash
+getenforce
+```
+
+Add custom SSH port:
+
+```bash
+sudo semanage port -a -t ssh_port_t -p tcp 2222
+```
+
+If already exists:
+
+```bash
+sudo semanage port -m -t ssh_port_t -p tcp 2222
+```
+
+Install semanage tools:
+
+```bash
+sudo dnf install policycoreutils-python-utils -y
+```
+
+---
+
+# 11. Restrict SSH Users
+
+Only allow specific users:
+
+```bash
+AllowUsers admin devops
+```
+
+Or groups:
+
+```bash
+AllowGroups sshusers
+```
+
+Create group:
+
+```bash
+sudo groupadd sshusers
+sudo usermod -aG sshusers username
+```
+
+---
+
+# 12. Advanced SSH Key Restrictions
+
+In `authorized_keys`:
+
+```bash
+from="10.0.0.5",command="/usr/local/bin/backup.sh",no-port-forwarding,no-agent-forwarding ssh-ed25519 AAAA...
+```
+
+Description:
+
+| Option                | Purpose             |
+| --------------------- | ------------------- |
+| `from=`               | Restrict source IP  |
+| `command=`            | Force command       |
+| `no-port-forwarding`  | Disable tunnels     |
+| `no-agent-forwarding` | Prevent agent abuse |
+
+---
+
+# 13. Fail2Ban Protection
+
+## Ubuntu
+
+```bash
+sudo apt install fail2ban -y
+```
+
+## RHEL
+
+```bash
+sudo dnf install fail2ban -y
+```
+
+Enable:
+
+```bash
+sudo systemctl enable --now fail2ban
+```
+
+Create jail config:
+
+```bash
+sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+```
+
+Edit:
+
+```bash
+sudo vi /etc/fail2ban/jail.local
+```
+
+SSH section:
+
+```ini
+[sshd]
+enabled = true
+port = 2222
+maxretry = 3
+findtime = 10m
+bantime = 1h
+```
+
+Restart:
+
+```bash
+sudo systemctl restart fail2ban
+```
+
+Check bans:
+
+```bash
+sudo fail2ban-client status sshd
+```
+
+---
+
+# 14. Disable Weak Ciphers & Algorithms
+
+View supported:
+
+```bash
+ssh -Q cipher
+ssh -Q mac
+ssh -Q key
+```
+
+Production-safe example:
+
+```bash
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com
+KexAlgorithms curve25519-sha256
+```
+
+---
+
+# 15. Multi-Factor Authentication (MFA)
+
+Install Google Authenticator PAM module.
+
+## Ubuntu
+
+```bash
+sudo apt install libpam-google-authenticator -y
+```
+
+## RHEL
+
+```bash
+sudo dnf install google-authenticator qrencode -y
+```
+
+Configure:
+
+```bash
+google-authenticator
+```
+
+Edit:
+
+```bash
+sudo vi /etc/pam.d/sshd
+```
+
+Add:
+
+```bash
+auth required pam_google_authenticator.so
+```
+
+Edit sshd config:
+
+```bash
+ChallengeResponseAuthentication yes
+AuthenticationMethods publickey,keyboard-interactive
+```
+
+Restart SSH.
+
+---
+
+# 16. Disable Unused Authentication Methods
+
+```bash
+KerberosAuthentication no
+GSSAPIAuthentication no
+HostbasedAuthentication no
+IgnoreRhosts yes
+```
+
+---
+
+# 17. SSH Audit Logging
+
+Check auth logs.
+
+## Ubuntu
+
+```bash
+sudo journalctl -u ssh
+```
+
+or
+
+```bash
+sudo tail -f /var/log/auth.log
+```
+
+## RHEL
+
+```bash
+sudo journalctl -u sshd
+```
+
+or
+
+```bash
+sudo tail -f /var/log/secure
+```
+
+---
+
+# 18. Intrusion Monitoring
+
+Monitor active sessions:
+
+```bash
+who
+w
+last
+lastb
+```
+
+Check failed attempts:
+
+```bash
+sudo grep "Failed password" /var/log/secure
+```
+
+Ubuntu:
+
+```bash
+sudo grep "Failed password" /var/log/auth.log
+```
+
+---
+
+# 19. SSH Rate Limiting with Firewall
+
+## firewalld (RHEL)
+
+```bash
+sudo firewall-cmd --permanent --add-rich-rule='rule service name="ssh" limit value="10/m" accept'
+sudo firewall-cmd --reload
+```
+
+---
+
+## UFW (Ubuntu)
+
+```bash
+sudo ufw limit 2222/tcp
+```
+
+---
+
+# 20. Advanced Enterprise Hardening
+
+## Disable SSH if not needed
+
+Use VPN + bastion host only.
+
+## Use Bastion Host
+
+Architecture:
+
+```text
+Internet -> Bastion -> Internal Servers
+```
+
+## Use SSH Certificates
+
+Instead of static keys.
+
+## Rotate Keys Regularly
+
+Example:
+
+* every 90 days
+
+## Integrate with LDAP/SSO
+
+Examples:
+
+* FreeIPA
+* Active Directory
+* Okta
+
+---
+
+# 21. Secure SSH Client Config
+
+Client-side config:
+
+```bash
+vi ~/.ssh/config
+```
+
+Example:
+
+```ini
+Host prod-server
+    HostName 10.0.0.10
+    User admin
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 60
+```
+
+Connect:
+
+```bash
+ssh prod-server
+```
+
+---
+
+# 22. SSH Tunneling (Advanced)
+
+Local tunnel:
+
+```bash
+ssh -L 8080:localhost:80 user@server
+```
+
+Remote tunnel:
+
+```bash
+ssh -R 9000:localhost:3000 user@server
+```
+
+SOCKS proxy:
+
+```bash
+ssh -D 1080 user@server
+```
+
+Production recommendation:
+
+* Disable if not needed
+
+---
+
+# 23. Security Validation
+
+Check open ports:
+
+```bash
+ss -tulpn
+```
+
+Test SSH:
+
+```bash
+ssh -vvv -p 2222 user@server
+```
+
+Scan locally:
+
+```bash
+nmap -sV server-ip
+```
+
+---
+
+# 24. Recommended Production SSH Policy
+
+Recommended minimum:
+
+```text
+✔ SSH Keys Only
+✔ Root Login Disabled
+✔ Non-default Port
+✔ MFA Enabled
+✔ Fail2Ban Enabled
+✔ Firewall Restricted
+✔ AllowUsers Configured
+✔ Modern Ciphers Only
+✔ SELinux Enforcing (RHEL)
+✔ Logs Monitored
+✔ Bastion Host for Production
+```
+
+---
+
+# 25. Example Hardened `sshd_config`
+
+```ini
+Port 2222
+Protocol 2
+
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+
+AllowUsers admin
+
+MaxAuthTries 3
+LoginGraceTime 30
+
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+X11Forwarding no
+AllowTcpForwarding no
+PermitTunnel no
+
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com
+KexAlgorithms curve25519-sha256
+
+UsePAM yes
+AuthenticationMethods publickey
+
+LogLevel VERBOSE
+```
+
+Validate:
+
+```bash
+sudo sshd -t
+```
+
+Reload safely:
+
+```bash
+sudo systemctl reload sshd
+```
+
+---
+
+# 26. Emergency Recovery Tips
+
+If locked out:
+
+Boot into rescue mode and fix:
+
+```bash
+/etc/ssh/sshd_config
+```
+
+Common mistake:
+
+```bash
+PasswordAuthentication no
+```
+
+before SSH keys are installed.
+
+Always test in second session first.
+
+---
+
+Useful official documentation:
+
+* [OpenSSH Manual Pages](https://www.openssh.com/manual.html?utm_source=chatgpt.com)
+* [Red Hat SSH Security Guide](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9?utm_source=chatgpt.com)
+* [Ubuntu Server SSH Documentation](https://ubuntu.com/server/docs/service-openssh?utm_source=chatgpt.com)
+
