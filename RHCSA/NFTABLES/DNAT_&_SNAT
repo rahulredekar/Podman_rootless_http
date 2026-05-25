@@ -1,0 +1,377 @@
+Below is a **complete practical guide to DNAT and SNAT using nftables** (Linux server environment), from **basic → advanced**, with **secure vs insecure examples + explanations**.
+
+Works on:
+
+* Red Hat Enterprise Linux
+* Ubuntu
+* nftables
+
+---
+
+# 1. What is DNAT and SNAT?
+
+## 🔁 DNAT (Destination NAT)
+
+Changes **destination IP/port** of incoming traffic.
+
+👉 Used for:
+
+* Port forwarding
+* Publishing internal servers
+
+Example:
+
+```text
+Public IP → Private Web Server
+```
+
+---
+
+## 🔁 SNAT (Source NAT)
+
+Changes **source IP** of outgoing traffic.
+
+👉 Used for:
+
+* Internet sharing
+* Masquerading behind router
+
+Example:
+
+```text
+LAN → Internet (via one public IP)
+```
+
+---
+
+# 2. nftables NAT Table Setup
+
+## Create NAT table
+
+```bash id="nat1"
+sudo nft add table ip nat
+```
+
+---
+
+## Create PREROUTING chain (DNAT)
+
+```bash id="nat2"
+sudo nft add chain ip nat prerouting '{ type nat hook prerouting priority -100 ; }'
+```
+
+---
+
+## Create POSTROUTING chain (SNAT)
+
+```bash id="nat3"
+sudo nft add chain ip nat postrouting '{ type nat hook postrouting priority 100 ; }'
+```
+
+---
+
+# 3. DNAT (Basic Port Forwarding)
+
+## Example:
+
+Forward HTTP (80) to internal server `192.168.1.10`
+
+### Add rule
+
+```bash id="dnat1"
+sudo nft add rule ip nat prerouting tcp dport 80 dnat to 192.168.1.10:80
+```
+
+### Meaning:
+
+* Incoming traffic on port 80 → sent to internal server
+
+---
+
+## Delete DNAT rule
+
+```bash id="dnat_del"
+sudo nft delete rule ip nat prerouting handle <ID>
+```
+
+---
+
+## ❌ Insecure DNAT example
+
+```bash id="dnat_bad"
+# forwarding all ports blindly
+nft add rule ip nat prerouting dnat to 192.168.1.10
+```
+
+### Problem:
+
+* All ports exposed
+* No control
+* High security risk
+
+---
+
+## Difference
+
+| Secure DNAT   | Unsecure DNAT |
+| ------------- | ------------- |
+| Specific port | All ports     |
+| Controlled    | Open exposure |
+
+---
+
+# 4. SNAT (Basic Internet Sharing)
+
+## Example:
+
+LAN → Internet via public IP `203.0.113.10`
+
+### Add rule
+
+```bash id="snat1"
+sudo nft add rule ip nat postrouting ip saddr 192.168.1.0/24 oif "eth0" snat to 203.0.113.10
+```
+
+---
+
+## Meaning:
+
+* All LAN traffic appears from public IP
+
+---
+
+## Delete SNAT rule
+
+```bash id="snat_del"
+sudo nft delete rule ip nat postrouting handle <ID>
+```
+
+---
+
+## ❌ Insecure SNAT (bad design)
+
+```bash id="snat_bad"
+nft add rule ip nat postrouting snat to 203.0.113.10
+```
+
+### Problem:
+
+* Applies to ALL traffic without restriction
+
+---
+
+## Difference
+
+| Secure SNAT     | Unsecure SNAT  |
+| --------------- | -------------- |
+| LAN restricted  | Global rewrite |
+| Interface-based | No control     |
+
+---
+
+# 5. MASQUERADE (Dynamic SNAT - Recommended)
+
+## Best for dynamic IP (cloud/home servers)
+
+```bash id="masq1"
+sudo nft add rule ip nat postrouting oif "eth0" masquerade
+```
+
+---
+
+## Meaning:
+
+* Automatically uses outgoing interface IP
+* No manual IP required
+
+---
+
+## Delete rule
+
+```bash id="masq_del"
+sudo nft delete rule ip nat postrouting handle <ID>
+```
+
+---
+
+# 6. Full Port Forwarding Example (Real Server)
+
+## Scenario:
+
+* Public IP: `203.0.113.10`
+* Web server: `192.168.1.10`
+
+---
+
+## DNAT (forward HTTP)
+
+```bash id="full1"
+sudo nft add rule ip nat prerouting iif "eth0" tcp dport 80 dnat to 192.168.1.10:80
+```
+
+---
+
+## SNAT reply path
+
+```bash id="full2"
+sudo nft add rule ip nat postrouting ip saddr 192.168.1.10 oif "eth0" snat to 203.0.113.10
+```
+
+---
+
+## Meaning:
+
+| Direction | Action                  |
+| --------- | ----------------------- |
+| Incoming  | DNAT to internal server |
+| Outgoing  | SNAT to public IP       |
+
+---
+
+# 7. FORWARD chain MUST allow NAT traffic
+
+```bash id="fw1"
+sudo nft add rule inet filter forward ct state established,related accept
+```
+
+```bash id="fw2"
+sudo nft add rule inet filter forward ip daddr 192.168.1.10 tcp dport 80 accept
+```
+
+---
+
+# 8. Secure vs Unsecure NAT Design
+
+## 🔒 Secure NAT design
+
+✔ Specific ports only
+✔ Interface-based filtering
+✔ State tracking enabled
+✔ Restricted subnet
+
+---
+
+## ❌ Unsecure NAT design
+
+✖ Full subnet exposure
+✖ No port restriction
+✖ No firewall rules
+✖ No state tracking
+
+---
+
+# 9. Advanced DNAT (Multiple Services)
+
+## Web + SSH forwarding
+
+```bash id="adv1"
+sudo nft add rule ip nat prerouting tcp dport 80 dnat to 192.168.1.10:80
+sudo nft add rule ip nat prerouting tcp dport 22 dnat to 192.168.1.20:22
+```
+
+---
+
+## Delete
+
+```bash id="adv_del"
+sudo nft delete rule ip nat prerouting handle <ID>
+```
+
+---
+
+# 10. Advanced SNAT (Multiple Subnets)
+
+```bash id="adv2"
+sudo nft add rule ip nat postrouting ip saddr {192.168.1.0/24, 10.0.0.0/24} oif "eth0" masquerade
+```
+
+---
+
+# 11. IPv6 NAT Note (IMPORTANT)
+
+IPv6 normally:
+
+* ❌ does NOT use NAT
+* Uses routing instead
+
+But if needed (rare cases):
+
+* NAT66 exists but NOT recommended
+
+---
+
+# 12. Monitoring NAT traffic
+
+```bash id="mon1"
+sudo nft monitor
+```
+
+---
+
+# 13. View NAT rules
+
+```bash id="view1"
+sudo nft list table ip nat
+```
+
+---
+
+# 14. Flush NAT rules
+
+```bash id="flush1"
+sudo nft flush table ip nat
+```
+
+---
+
+# 15. Production Secure NAT Setup (BEST PRACTICE)
+
+```bash id="prod1"
+sudo nft add table ip nat
+
+sudo nft add chain ip nat prerouting '{ type nat hook prerouting priority -100 ; }'
+
+sudo nft add chain ip nat postrouting '{ type nat hook postrouting priority 100 ; }'
+
+sudo nft add rule ip nat prerouting iif "eth0" tcp dport 80 dnat to 192.168.1.10:80
+
+sudo nft add rule ip nat postrouting oif "eth0" masquerade
+```
+
+---
+
+# 16. Security Summary
+
+| Feature              | Secure | Unsecure |
+| -------------------- | ------ | -------- |
+| Port-specific DNAT   | ✅      | ❌        |
+| Interface-based SNAT | ✅      | ❌        |
+| Masquerade use       | ✅      | ⚠        |
+| Full NAT exposure    | ❌      | ❌❌       |
+| State tracking       | ✅      | ❌        |
+
+---
+
+# 17. Best Practices
+
+✔ Always use specific ports in DNAT
+✔ Use masquerade for dynamic IP
+✔ Always configure FORWARD chain
+✔ Never expose full subnet
+✔ Use state tracking
+✔ Log NAT traffic for debugging
+✔ Test from external network
+
+---
+
+# 18. If you want next level
+
+I can show:
+
+✔ Kubernetes NAT networking rules
+✔ Multi-WAN failover NAT
+✔ Load balancing DNAT (round-robin)
+✔ Advanced firewall + NAT integration
+✔ Zero-trust NAT architecture
+
+Just tell 👍
