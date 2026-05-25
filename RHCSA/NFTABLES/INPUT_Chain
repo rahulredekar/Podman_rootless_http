@@ -1,0 +1,968 @@
+# Complete nftables Firewall Guide (IPv4 + IPv6)
+
+For:
+
+* Red Hat Enterprise Linux
+* Ubuntu
+
+Covers:
+
+* Install & enable
+* IPv4 + IPv6 firewalling
+* Block/allow single IP
+* Block/allow subnet
+* Block ALL traffic
+* SSH/Telnet/Web rules
+* ICMP/ICMPv6
+* Rate limiting
+* Blacklists
+* Logging
+* Save persistent rules
+* Delete every rule
+* Production-ready examples
+
+---
+
+# 1. Install nftables
+
+## RHEL 9
+
+```bash
+sudo dnf install nftables -y
+sudo systemctl enable nftables
+sudo systemctl start nftables
+```
+
+---
+
+## Ubuntu 24.04
+
+```bash
+sudo apt update
+sudo apt install nftables -y
+sudo systemctl enable nftables
+sudo systemctl start nftables
+```
+
+---
+
+# 2. Verify nftables
+
+```bash
+sudo systemctl status nftables
+```
+
+---
+
+# 3. Show Current Rules
+
+```bash
+sudo nft list ruleset
+```
+
+---
+
+# 4. Show Rules with Handles (Needed for Delete)
+
+```bash
+sudo nft -a list ruleset
+```
+
+Example output:
+
+```bash
+tcp dport 22 accept # handle 15
+```
+
+Delete using:
+
+```bash
+sudo nft delete rule inet filter input handle 15
+```
+
+---
+
+# 5. Create Firewall Table
+
+## Add Table
+
+```bash
+sudo nft add table inet filter
+```
+
+Description:
+
+* `inet` supports BOTH IPv4 + IPv6
+
+---
+
+## Delete Table
+
+```bash
+sudo nft delete table inet filter
+```
+
+---
+
+# 6. Create INPUT Chain
+
+## Add Chain
+
+```bash
+sudo nft add chain inet filter input '{ type filter hook input priority 0 ; policy accept ; }'
+```
+
+Description:
+
+* Handles incoming traffic
+
+---
+
+## Delete Chain
+
+```bash
+sudo nft delete chain inet filter input
+```
+
+---
+
+# 7. Create FORWARD Chain
+
+## Add
+
+```bash
+sudo nft add chain inet filter forward '{ type filter hook forward priority 0 ; policy drop ; }'
+```
+
+---
+
+## Delete
+
+```bash
+sudo nft delete chain inet filter forward
+```
+
+---
+
+# 8. Create OUTPUT Chain
+
+## Add
+
+```bash
+sudo nft add chain inet filter output '{ type filter hook output priority 0 ; policy accept ; }'
+```
+
+---
+
+## Delete
+
+```bash
+sudo nft delete chain inet filter output
+```
+
+---
+
+# 9. Allow Localhost
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input iif lo accept
+```
+
+Description:
+
+* Allows local machine communication
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 10
+```
+
+---
+
+# 10. Allow Established Connections
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ct state established,related accept
+```
+
+Description:
+
+* Keeps active sessions alive
+
+IMPORTANT:
+
+* Required in production
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 11
+```
+
+---
+
+# 11. Block Single IPv4 Address
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.1.50 drop
+```
+
+Description:
+
+* Blocks one IPv4 address
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 12
+```
+
+---
+
+# 12. Allow Single IPv4 Address
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.1.100 accept
+```
+
+Description:
+
+* Allows one trusted IP
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 13
+```
+
+---
+
+# 13. Block IPv4 Subnet
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.10.0/24 drop
+```
+
+Description:
+
+* Blocks entire subnet
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 14
+```
+
+---
+
+# 14. Allow IPv4 Subnet
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip saddr 10.10.20.0/24 accept
+```
+
+Description:
+
+* Allows selected subnet
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 15
+```
+
+---
+
+# 15. Block Single IPv6 Address
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip6 saddr 2001:db8::10 drop
+```
+
+Description:
+
+* Blocks one IPv6 address
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 16
+```
+
+---
+
+# 16. Allow Single IPv6 Address
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip6 saddr 2001:db8::20 accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 17
+```
+
+---
+
+# 17. Block IPv6 Subnet
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip6 saddr 2001:db8:abcd::/64 drop
+```
+
+Description:
+
+* Blocks IPv6 subnet
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 18
+```
+
+---
+
+# 18. Allow IPv6 Subnet
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip6 saddr 2001:db8:1111::/64 accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 19
+```
+
+---
+
+# 19. Block ALL Incoming Traffic
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input drop
+```
+
+WARNING:
+
+* Can disconnect SSH
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 20
+```
+
+---
+
+# 20. Allow SSH (Port 22)
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 accept
+```
+
+Description:
+
+* Allows SSH access
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 21
+```
+
+---
+
+# 21. Block SSH
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 22
+```
+
+---
+
+# 22. Allow SSH Only From One IP
+
+## Add Rule
+
+IPv4:
+
+```bash
+sudo nft add rule inet filter input ip saddr 203.0.113.10 tcp dport 22 accept
+```
+
+IPv6:
+
+```bash
+sudo nft add rule inet filter input ip6 saddr 2001:db8::50 tcp dport 22 accept
+```
+
+---
+
+## Block Others
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 drop
+```
+
+---
+
+## Delete Rules
+
+```bash
+sudo nft delete rule inet filter input handle 23
+sudo nft delete rule inet filter input handle 24
+sudo nft delete rule inet filter input handle 25
+```
+
+---
+
+# 23. SSH Rate Limiting
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 22 ct state new limit rate 5/minute accept
+```
+
+Description:
+
+* Prevents brute-force attacks
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 26
+```
+
+---
+
+# 24. Block Telnet (Port 23)
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 23 drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 27
+```
+
+---
+
+# 25. Allow HTTP (Port 80)
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 80 accept
+```
+
+Description:
+
+* Allows web server traffic
+
+Used by:
+
+* Apache HTTP Server
+* Nginx
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 28
+```
+
+---
+
+# 26. Allow HTTPS (Port 443)
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport 443 accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 29
+```
+
+---
+
+# 27. Allow HTTP + HTTPS Together
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport {80,443} accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 30
+```
+
+---
+
+# 28. Block HTTP + HTTPS
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input tcp dport {80,443} drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 31
+```
+
+---
+
+# 29. Block ICMP (IPv4 Ping)
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip protocol icmp drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 32
+```
+
+---
+
+# 30. Allow ICMP
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip protocol icmp accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 33
+```
+
+---
+
+# 31. Block ICMPv6
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip6 nexthdr icmpv6 drop
+```
+
+WARNING:
+
+* May break IPv6 networking
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 34
+```
+
+---
+
+# 32. Allow ICMPv6
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip6 nexthdr icmpv6 accept
+```
+
+IMPORTANT:
+
+* Recommended for IPv6
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 35
+```
+
+---
+
+# 33. Create IPv4 Blacklist Set
+
+## Add Set
+
+```bash
+sudo nft add set inet filter blacklist '{ type ipv4_addr; }'
+```
+
+---
+
+## Delete Set
+
+```bash
+sudo nft delete set inet filter blacklist
+```
+
+---
+
+# 34. Add IPs to Blacklist
+
+## Add Elements
+
+```bash
+sudo nft add element inet filter blacklist { 10.0.0.5, 192.168.1.20 }
+```
+
+---
+
+## Delete Elements
+
+```bash
+sudo nft delete element inet filter blacklist { 10.0.0.5 }
+```
+
+---
+
+# 35. Use Blacklist Set
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip saddr @blacklist drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 36
+```
+
+---
+
+# 36. Create IPv6 Blacklist Set
+
+## Add Set
+
+```bash
+sudo nft add set inet filter ipv6_blacklist '{ type ipv6_addr; }'
+```
+
+---
+
+## Delete Set
+
+```bash
+sudo nft delete set inet filter ipv6_blacklist
+```
+
+---
+
+# 37. Add IPv6 IPs to Blacklist
+
+## Add Elements
+
+```bash
+sudo nft add element inet filter ipv6_blacklist { 2001:db8::1, 2001:db8::2 }
+```
+
+---
+
+## Delete Elements
+
+```bash
+sudo nft delete element inet filter ipv6_blacklist { 2001:db8::1 }
+```
+
+---
+
+# 38. Use IPv6 Blacklist
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input ip6 saddr @ipv6_blacklist drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 37
+```
+
+---
+
+# 39. Log Dropped Packets
+
+## Add Rule
+
+```bash
+sudo nft add rule inet filter input log prefix "NFT-DROP: " drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle 38
+```
+
+---
+
+# 40. Monitor Live Firewall Activity
+
+```bash
+sudo nft monitor
+```
+
+---
+
+# 41. Show Listening Ports
+
+## IPv4 + IPv6
+
+```bash
+sudo ss -tulpn
+```
+
+---
+
+## IPv6 Only
+
+```bash
+sudo ss -tulpn -6
+```
+
+---
+
+# 42. Check IPv6 Addresses
+
+```bash
+ip -6 addr
+```
+
+---
+
+# 43. Check IPv6 Routes
+
+```bash
+ip -6 route
+```
+
+---
+
+# 44. Backup Firewall Rules
+
+## Backup
+
+```bash
+sudo nft list ruleset > nft-backup.conf
+```
+
+---
+
+## Restore
+
+```bash
+sudo nft -f nft-backup.conf
+```
+
+---
+
+# 45. Flush ALL Rules
+
+```bash
+sudo nft flush ruleset
+```
+
+Description:
+
+* Removes ALL firewall rules
+
+---
+
+# 46. Save Rules Permanently
+
+## RHEL 9
+
+```bash
+sudo nft list ruleset > /etc/sysconfig/nftables.conf
+sudo systemctl restart nftables
+```
+
+---
+
+## Ubuntu 24.04
+
+```bash
+sudo sh -c 'nft list ruleset > /etc/nftables.conf'
+sudo systemctl restart nftables
+```
+
+---
+
+# 47. Reload Rules File
+
+```bash
+sudo nft -f /etc/nftables.conf
+```
+
+---
+
+# 48. Secure Production Firewall Example
+
+```bash
+sudo nft flush ruleset
+
+sudo nft add table inet filter
+
+sudo nft add chain inet filter input '{ type filter hook input priority 0 ; policy drop ; }'
+
+sudo nft add chain inet filter forward '{ type filter hook forward priority 0 ; policy drop ; }'
+
+sudo nft add chain inet filter output '{ type filter hook output priority 0 ; policy accept ; }'
+
+sudo nft add rule inet filter input iif lo accept
+
+sudo nft add rule inet filter input ct state established,related accept
+
+sudo nft add rule inet filter input ip saddr 203.0.113.10 tcp dport 22 accept
+
+sudo nft add rule inet filter input ip6 saddr 2001:db8::50 tcp dport 22 accept
+
+sudo nft add rule inet filter input tcp dport {80,443} accept
+
+sudo nft add rule inet filter input ip protocol icmp accept
+
+sudo nft add rule inet filter input ip6 nexthdr icmpv6 accept
+```
+
+---
+
+# 49. Recommended Security Best Practices
+
+| Recommendation        | Reason              |
+| --------------------- | ------------------- |
+| Use `policy drop`     | Secure by default   |
+| Allow SSH before drop | Prevent lockout     |
+| Allow ICMPv6          | IPv6 requires it    |
+| Use sets              | Better performance  |
+| Backup before changes | Recovery            |
+| Use rate limiting     | Prevent brute force |
+| Use logging           | Debug attacks       |
+| Test remotely         | Avoid downtime      |
+
+---
+
+# 50. Common Ports
+
+| Service | Port |
+| ------- | ---- |
+| SSH     | 22   |
+| Telnet  | 23   |
+| HTTP    | 80   |
+| HTTPS   | 443  |
+| DNS     | 53   |
+| SMTP    | 25   |
+
+---
+
+# Official Documentation
+
+* [nftables wiki](https://wiki.nftables.org/?utm_source=chatgpt.com)
+* [Red Hat nftables docs](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/configuring_firewalls_and_packet_filters/getting-started-with-nftables_configuring-firewalls-and-packet-filters?utm_source=chatgpt.com)
+* [Ubuntu firewall guide](https://ubuntu.com/server/docs/security-firewall?utm_source=chatgpt.com)

@@ -1,0 +1,617 @@
+# nftables ICMP / ICMPv6 Guide (Echo Request & Echo Reply)
+
+For:
+
+* Red Hat Enterprise Linux
+* Ubuntu
+* nftables
+
+This guide covers:
+
+* ICMP basics
+* Echo request/reply
+* IPv4 + IPv6
+* Secure vs unsecure rules
+* Allow/block ping
+* Rate limiting
+* Selected IP/subnet ping rules
+* Logging
+* Forward chain ICMP
+* Production-safe ICMP rules
+* Delete commands
+
+---
+
+# 1. What is ICMP?
+
+ICMP = Internet Control Message Protocol
+
+Used for:
+
+* ping
+* traceroute
+* network diagnostics
+* MTU discovery
+
+---
+
+# 2. ICMP Echo Types
+
+| ICMP Type    | Meaning       |
+| ------------ | ------------- |
+| echo-request | Ping request  |
+| echo-reply   | Ping response |
+
+---
+
+# 3. Basic Ping Flow
+
+```text
+Client ---> echo-request ---> Server
+Client <--- echo-reply <--- Server
+```
+
+---
+
+# 4. Allow ALL ICMP (IPv4)
+
+## ✅ Secure-ish basic rule
+
+```bash
+sudo nft add rule inet filter input ip protocol icmp accept
+```
+
+Description:
+
+* Allows all IPv4 ICMP packets
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 5. ❌ Unsecure Alternative
+
+```bash
+sudo nft add rule inet filter input accept
+```
+
+Problem:
+
+* Allows EVERYTHING, not only ICMP
+
+---
+
+# Difference
+
+| Secure     | Unsecure               |
+| ---------- | ---------------------- |
+| ICMP only  | Entire firewall bypass |
+| Controlled | Fully open             |
+
+---
+
+# 6. Allow ONLY Echo Request (Ping)
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmp type echo-request accept
+```
+
+Description:
+
+* Allows incoming ping requests only
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 7. Allow ONLY Echo Reply
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmp type echo-reply accept
+```
+
+Description:
+
+* Allows ping replies only
+
+Useful:
+
+* System can ping out
+* External users cannot ping server
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 8. Block Ping Requests
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmp type echo-request drop
+```
+
+Description:
+
+* Blocks incoming ping
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 9. ❌ Unsecure ICMP Blocking
+
+```bash
+sudo nft add rule inet filter input ip protocol icmp drop
+```
+
+Problem:
+
+* Breaks PMTU discovery
+* Can break networking/troubleshooting
+
+---
+
+# Difference
+
+| Secure           | Unsecure        |
+| ---------------- | --------------- |
+| Blocks only ping | Blocks ALL ICMP |
+| Networking works | May break apps  |
+
+---
+
+# 10. Allow Ping From Specific IP
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.1.100 icmp type echo-request accept
+```
+
+Description:
+
+* Only trusted IP can ping
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 11. Allow Ping From Specific Subnet
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input ip saddr 192.168.1.0/24 icmp type echo-request accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 12. Block Ping From Specific IP
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input ip saddr 10.10.10.5 icmp type echo-request drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 13. ICMP Rate Limiting (IMPORTANT)
+
+## ✅ Secure Production Rule
+
+```bash
+sudo nft add rule inet filter input icmp type echo-request limit rate 5/second accept
+```
+
+Description:
+
+* Prevents ping flood attacks
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 14. ❌ Unsecure No-Limit Rule
+
+```bash
+sudo nft add rule inet filter input icmp type echo-request accept
+```
+
+Problem:
+
+* Unlimited ping flood possible
+
+---
+
+# Difference
+
+| Secure           | Unsecure      |
+| ---------------- | ------------- |
+| Flood protection | No protection |
+
+---
+
+# 15. Log Ping Requests
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmp type echo-request log prefix "PING: " accept
+```
+
+Description:
+
+* Logs ping activity
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 16. ICMP Forward Chain Rules
+
+## Allow forwarded ping
+
+```bash
+sudo nft add rule inet filter forward icmp type echo-request accept
+```
+
+Description:
+
+* Allows routed ping traffic
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter forward handle <ID>
+```
+
+---
+
+# 17. Block forwarded ping
+
+```bash
+sudo nft add rule inet filter forward icmp type echo-request drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter forward handle <ID>
+```
+
+---
+
+# 18. IPv6 ICMPv6 Basics
+
+IMPORTANT:
+
+* ICMPv6 is REQUIRED for IPv6 operation
+
+NEVER blindly block all ICMPv6.
+
+---
+
+# 19. Allow ICMPv6 Echo Request
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmpv6 type echo-request accept
+```
+
+Description:
+
+* Allows IPv6 ping
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 20. Allow ICMPv6 Echo Reply
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmpv6 type echo-reply accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 21. Block ICMPv6 Echo Request
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmpv6 type echo-request drop
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 22. ❌ VERY Unsecure IPv6 Rule
+
+```bash
+sudo nft add rule inet filter input ip6 nexthdr icmpv6 drop
+```
+
+Problem:
+
+* Breaks IPv6 networking
+* Breaks SLAAC
+* Breaks neighbor discovery
+
+---
+
+# Difference
+
+| Secure           | Unsecure    |
+| ---------------- | ----------- |
+| Blocks only ping | Breaks IPv6 |
+
+---
+
+# 23. Allow Essential ICMPv6 Only (BEST PRACTICE)
+
+## ✅ Production-safe IPv6
+
+```bash
+sudo nft add rule inet filter input icmpv6 type {
+    destination-unreachable,
+    packet-too-big,
+    time-exceeded,
+    parameter-problem,
+    nd-neighbor-solicit,
+    nd-neighbor-advert,
+    nd-router-advert,
+    echo-request,
+    echo-reply
+} accept
+```
+
+Description:
+
+* Allows only critical ICMPv6 traffic
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 24. Rate Limit ICMPv6
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input icmpv6 type echo-request limit rate 5/second accept
+```
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 25. Stateful ICMP Rules
+
+## ✅ Secure
+
+```bash
+sudo nft add rule inet filter input ct state established,related accept
+```
+
+Description:
+
+* Allows related ICMP traffic automatically
+
+---
+
+## Delete Rule
+
+```bash
+sudo nft delete rule inet filter input handle <ID>
+```
+
+---
+
+# 26. Secure Production ICMP Setup (Recommended)
+
+## IPv4
+
+```bash
+sudo nft add rule inet filter input ct state established,related accept
+
+sudo nft add rule inet filter input icmp type echo-request limit rate 5/second accept
+
+sudo nft add rule inet filter input icmp type echo-reply accept
+```
+
+---
+
+## IPv6
+
+```bash
+sudo nft add rule inet filter input icmpv6 type {
+    destination-unreachable,
+    packet-too-big,
+    time-exceeded,
+    parameter-problem,
+    nd-neighbor-solicit,
+    nd-neighbor-advert,
+    nd-router-advert,
+    echo-request,
+    echo-reply
+} accept
+```
+
+---
+
+# 27. Monitor ICMP Traffic
+
+```bash
+sudo nft monitor
+```
+
+---
+
+# 28. Show Rules
+
+```bash
+sudo nft list ruleset
+```
+
+---
+
+# 29. Show Rules with Handles
+
+```bash
+sudo nft -a list ruleset
+```
+
+---
+
+# 30. Flush ICMP Rules
+
+## Flush input chain
+
+```bash
+sudo nft flush chain inet filter input
+```
+
+---
+
+## Flush all
+
+```bash
+sudo nft flush ruleset
+```
+
+---
+
+# 31. Security Comparison Summary
+
+| Rule Type         | Secure | Unsecure |
+| ----------------- | ------ | -------- |
+| echo-request only | ✅      |          |
+| echo-reply only   | ✅      |          |
+| rate limiting     | ✅      |          |
+| specific subnet   | ✅      |          |
+| allow all ICMP    | ⚠      |          |
+| block all ICMP    | ❌      |          |
+| block all ICMPv6  | ❌❌     |          |
+
+---
+
+# 32. Best Practice Recommendations
+
+✔ Allow essential ICMP
+✔ Allow ICMPv6 neighbor discovery
+✔ Use rate limits
+✔ Allow only trusted ping if needed
+✔ Use `ct state established,related`
+✔ Never block all ICMPv6 blindly
+
+---
+
+# Official Documentation
+
+* [nftables wiki](https://wiki.nftables.org/?utm_source=chatgpt.com)
+* [Red Hat nftables docs](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/configuring_firewalls_and_packet_filters/getting-started-with-nftables_configuring-firewalls-and-packet-filters?utm_source=chatgpt.com)
+* [Ubuntu firewall guide](https://ubuntu.com/server/docs/security-firewall?utm_source=chatgpt.com)
