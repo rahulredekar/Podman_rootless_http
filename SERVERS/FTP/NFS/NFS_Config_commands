@@ -1,0 +1,335 @@
+Here is your **FINAL 2026 MODERN NFS + AUTOFs COMMAND CHEATSHEET** with **clean commands + short description + SERVER/CLIENT tagging** (production-ready, no extra noise).
+
+---
+
+# 🧠 2026 MODERN NFS + AUTOFs COMMAND CHEATSHEET
+
+---
+
+# 🟢 PART 1 — NFS SERVER (RHEL 9 / UBUNTU 24.04)
+
+---
+
+## 📌 Install NFS SERVER (SERVER SIDE)
+
+```bash
+sudo dnf install -y nfs-utils
+```
+
+👉 Installs NFS server tools (RHEL)
+
+```bash
+sudo apt install -y nfs-kernel-server
+```
+
+👉 Installs NFS server daemon (Ubuntu)
+
+---
+
+## 📌 Enable NFS SERVICE (SERVER SIDE)
+
+```bash
+sudo systemctl enable --now nfs-server
+```
+
+👉 Starts NFS server and enables auto-start
+
+---
+
+## 📌 Create EXPORT DIRECTORY (SERVER SIDE)
+
+```bash
+sudo mkdir -p /srv/nfs/share
+```
+
+👉 Creates shared folder
+
+```bash
+sudo chmod 755 /srv/nfs/share
+```
+
+👉 Sets safe permissions
+
+---
+
+## 📌 Configure EXPORTS (SERVER SIDE)
+
+```bash
+sudo nano /etc/exports
+```
+
+```bash
+/srv/nfs/share 192.168.1.0/24(rw,sync,root_squash,no_subtree_check)
+```
+
+👉 Defines allowed client network + permissions
+
+---
+
+## 📌 APPLY EXPORTS (SERVER SIDE)
+
+```bash
+sudo exportfs -rav
+```
+
+👉 Activates export configuration
+
+```bash
+sudo exportfs -v
+```
+
+👉 Shows active exports
+
+---
+
+## 📌 FIREWALL OPEN (SERVER SIDE)
+
+```bash
+sudo firewall-cmd --permanent --add-service=nfs
+sudo firewall-cmd --reload
+```
+
+👉 Opens NFS access (RHEL)
+
+```bash
+sudo ufw allow 2049/tcp
+```
+
+👉 Opens NFS port (Ubuntu)
+
+---
+
+## 📌 VERIFY SERVER (SERVER SIDE)
+
+```bash
+ss -tulpn | grep 2049
+```
+
+👉 Confirms NFS is running
+
+```bash
+exportfs -v
+```
+
+👉 Checks exports
+
+---
+
+# 🟡 PART 2 — NFS CLIENT (RHEL / UBUNTU)
+
+---
+
+## 📌 Install CLIENT PACKAGES (CLIENT SIDE)
+
+```bash
+sudo dnf install -y nfs-utils
+```
+
+👉 RHEL client tools
+
+```bash
+sudo apt install -y nfs-common
+```
+
+👉 Ubuntu client tools
+
+---
+
+## 📌 Create MOUNT POINT (CLIENT SIDE)
+
+```bash
+sudo mkdir -p /mnt/nfs
+```
+
+👉 Folder where NFS will mount
+
+---
+
+## 📌 MANUAL MOUNT TEST (CLIENT SIDE)
+
+```bash
+sudo mount -t nfs4 server_ip:/srv/nfs/share /mnt/nfs
+```
+
+👉 Temporary mount test
+
+---
+
+## 📌 VERIFY MOUNT (CLIENT SIDE)
+
+```bash
+df -h | grep nfs
+```
+
+👉 Shows mounted filesystem
+
+```bash
+nfsstat -m
+```
+
+👉 Displays NFS mount details
+
+---
+
+## 📌 TEST WRITE (CLIENT SIDE)
+
+```bash
+touch /mnt/nfs/testfile
+```
+
+👉 Checks read/write access
+
+---
+
+# 🟢 PART 3 — MODERN SYSTEMD AUTOMOUNT (BEST PRACTICE)
+
+---
+
+## 📌 FSTAB ENTRY (CLIENT SIDE)
+
+```bash
+sudo nano /etc/fstab
+```
+
+```bash
+server_ip:/srv/nfs/share /mnt/nfs nfs4 defaults,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600 0 0
+```
+
+👉 Auto-mount on access (no boot hang)
+
+---
+
+## 📌 APPLY FSTAB (CLIENT SIDE)
+
+```bash
+sudo systemctl daemon-reload
+sudo mount -a
+```
+
+👉 Activates systemd automount
+
+---
+
+# 🟡 PART 4 — AUTOFs (ENTERPRISE DYNAMIC MOUNT)
+
+---
+
+## 📌 INSTALL AUTOFs (CLIENT SIDE ONLY)
+
+```bash
+sudo dnf install -y autofs
+```
+
+👉 RHEL autofs install
+
+```bash
+sudo apt install -y autofs
+```
+
+👉 Ubuntu autofs install
+
+---
+
+## 📌 ENABLE AUTOFs (CLIENT SIDE)
+
+```bash
+sudo systemctl enable --now autofs
+```
+
+👉 Starts autofs service
+
+---
+
+## 📌 MASTER CONFIG (CLIENT SIDE)
+
+```bash
+sudo nano /etc/auto.master
+```
+
+```bash
+/mnt/nfs /etc/auto.nfs --timeout=300 --ghost
+```
+
+👉 Defines auto-mount root + timeout
+
+---
+
+## 📌 MAP FILE (CLIENT SIDE)
+
+```bash
+sudo nano /etc/auto.nfs
+```
+
+```bash
+share -fstype=nfs4 server_ip:/srv/nfs/share
+```
+
+👉 Defines actual NFS mount
+
+---
+
+## 📌 RESTART AUTOFs (CLIENT SIDE)
+
+```bash
+sudo systemctl restart autofs
+```
+
+👉 Applies config
+
+---
+
+## 📌 TEST AUTOFs (CLIENT SIDE)
+
+```bash
+ls /mnt/nfs/share
+```
+
+👉 Triggers automatic mount
+
+---
+
+## 📌 VERIFY AUTOFs (CLIENT SIDE)
+
+```bash
+mount | grep nfs
+```
+
+👉 Confirms active mount
+
+---
+
+## 📌 TROUBLESHOOT AUTOFs (CLIENT SIDE)
+
+```bash
+journalctl -u autofs -f
+```
+
+👉 Live logs for debugging
+
+---
+
+# 🧠 FINAL 2026 DECISION RULE
+
+```text
+fstab + systemd automount → default for most systems
+autofs → enterprise large-scale dynamic environments
+NFS → underlying network file sharing protocol
+```
+
+---
+
+# ⚡ FINAL ONE-LINE
+
+> Modern 2026 NFS = NFSv4.2 + firewall + root_squash + systemd automount OR autofs depending on scale
+
+---
+
+If you want next level, I can give:
+
+* 🔐 Kerberos-secured NFS (bank-grade security)
+* 🧠 HA NFS cluster (failover design)
+* ☁️ AWS EFS vs NFS architecture comparison
+* ⚙️ Ansible automation playbook (fully automated setup)
+* 📦 Kubernetes NFS storage integration
+
+Just tell 👍
