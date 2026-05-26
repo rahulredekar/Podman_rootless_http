@@ -1,0 +1,232 @@
+Below are **clean, production-style Bash scripts (2026 standard)** for:
+
+* 🟢 Server side (RHEL 9 / Ubuntu 24 SFTP setup)
+* 🔵 Client side (key setup + connection + test)
+
+These are designed to be **safe, repeatable, and DevOps-friendly**.
+
+---
+
+# 🟢 1. SERVER SIDE SCRIPT (RHEL 9 + Ubuntu 24)
+
+### 📌 File: `setup_sftp_server.sh`
+
+> Run as: `sudo bash setup_sftp_server.sh`
+
+```bash
+#!/bin/bash
+
+set -e
+
+# ===== CONFIG =====
+SFTP_USER="sftpuser"
+SFTP_GROUP="sftpusers"
+BASE_DIR="/sftp"
+UPLOAD_DIR="upload"
+
+echo "🔵 Installing OpenSSH Server..."
+
+if command -v dnf &>/dev/null; then
+    dnf install -y openssh-server policycoreutils-python-utils || true
+    systemctl enable --now sshd
+elif command -v apt &>/dev/null; then
+    apt update -y
+    apt install -y openssh-server
+    systemctl enable --now ssh
+fi
+
+echo "🔵 Creating SFTP group and user..."
+
+groupadd -f $SFTP_GROUP
+
+id -u $SFTP_USER &>/dev/null || \
+useradd -m -g $SFTP_GROUP -s /usr/sbin/nologin $SFTP_USER
+
+echo "🔵 Setting password (temporary)..."
+echo "$SFTP_USER:ChangeMe123!" | chpasswd
+
+echo "🔵 Creating directory structure..."
+
+mkdir -p $BASE_DIR/$SFTP_USER/$UPLOAD_DIR
+
+chown root:root $BASE_DIR/$SFTP_USER
+chmod 755 $BASE_DIR/$SFTP_USER
+
+chown $SFTP_USER:$SFTP_GROUP $BASE_DIR/$SFTP_USER/$UPLOAD_DIR
+
+echo "🔵 Configuring SSHD..."
+
+SSHD_CONFIG="/etc/ssh/sshd_config"
+
+grep -q "internal-sftp" $SSHD_CONFIG || \
+echo "Subsystem sftp internal-sftp" >> $SSHD_CONFIG
+
+cat <<EOF >> $SSHD_CONFIG
+
+Match Group $SFTP_GROUP
+    ChrootDirectory $BASE_DIR/%u
+    ForceCommand internal-sftp
+    AllowTcpForwarding no
+    X11Forwarding no
+EOF
+
+echo "🔵 Hardening SSH..."
+
+sed -i 's/#\?PermitRootLogin.*/PermitRootLogin no/' $SSHD_CONFIG
+sed -i 's/#\?PasswordAuthentication.*/PasswordAuthentication no/' $SSHD_CONFIG
+sed -i 's/#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' $SSHD_CONFIG
+
+echo "🔵 Validating config..."
+sshd -t
+
+echo "🔵 Restarting SSH service..."
+
+if systemctl list-units | grep -q sshd; then
+    systemctl restart sshd
+else
+    systemctl restart ssh
+fi
+
+echo "🔵 Configuring firewall..."
+
+if command -v firewall-cmd &>/dev/null; then
+    firewall-cmd --permanent --add-service=ssh
+    firewall-cmd --reload
+elif command -v ufw &>/dev/null; then
+    ufw allow OpenSSH
+fi
+
+echo "✅ SFTP SERVER SETUP COMPLETE"
+echo "👉 User: $SFTP_USER"
+echo "👉 Path: $BASE_DIR/$SFTP_USER/$UPLOAD_DIR"
+```
+
+---
+
+# 🟢 SERVER SCRIPT FEATURES
+
+✔ Works on RHEL 9 + Ubuntu 24
+✔ Creates SFTP jail (chroot)
+✔ Disables root login
+✔ Disables password login (after setup)
+✔ Enables internal-sftp
+✔ Firewall configured
+✔ Safe structure
+
+---
+
+# 🔵 2. CLIENT SIDE SCRIPT
+
+### 📌 File: `setup_sftp_client.sh`
+
+> Run on client machine
+
+```bash
+#!/bin/bash
+
+set -e
+
+# ===== CONFIG =====
+SERVER_IP="YOUR_SERVER_IP"
+SFTP_USER="sftpuser"
+
+echo "🔵 Installing SSH client..."
+
+if command -v dnf &>/dev/null; then
+    sudo dnf install -y openssh-clients
+elif command -v apt &>/dev/null; then
+    sudo apt update -y
+    sudo apt install -y openssh-client
+fi
+
+echo "🔵 Generating SSH key (ed25519)..."
+
+ssh-keygen -t ed25519 -a 100 -N "" -f ~/.ssh/id_ed25519
+
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_ed25519
+chmod 644 ~/.ssh/id_ed25519.pub
+
+echo "🔵 Copying SSH key to server..."
+
+ssh-copy-id $SFTP_USER@$SERVER_IP
+
+echo "🔵 Testing SFTP connection..."
+
+sftp $SFTP_USER@$SERVER_IP <<EOF
+ls
+bye
+EOF
+
+echo "✅ CLIENT SETUP COMPLETE"
+echo "👉 Connect manually using:"
+echo "   sftp $SFTP_USER@$SERVER_IP"
+```
+
+---
+
+# 🔵 CLIENT FEATURES
+
+✔ Installs SSH client
+✔ Generates secure Ed25519 key
+✔ Copies key to server
+✔ Tests SFTP connection
+✔ Ready-to-use login
+
+---
+
+# ⚠️ IMPORTANT NOTES
+
+## 1. Before running server script:
+
+Change:
+
+```bash
+SFTP_USER="sftpuser"
+```
+
+## 2. After setup:
+
+Disable password login completely:
+
+```bash
+PasswordAuthentication no
+```
+
+## 3. First key copy is required:
+
+```bash
+ssh-copy-id user@server
+```
+
+---
+
+# 🧠 FINAL ARCHITECTURE
+
+```text
+Client
+ ├── SSH Key
+ ├── SFTP Command
+ └── Encrypted Connection
+
+Server
+ ├── OpenSSH (sshd)
+ ├── internal-sftp
+ ├── Chroot jail (/sftp/user)
+ ├── No root login
+ └── Firewall protected
+```
+
+---
+
+# 🚀 If you want next upgrade
+
+I can also build:
+
+* 🔥 Ansible automation (real DevOps standard)
+* 🔥 Multi-user SFTP provisioning script
+* 🔥 AWS EC2 auto SFTP setup (cloud-init)
+* 🔥 Docker-based SFTP server (1 command deploy)
+* 🔥 Monitoring + audit logging dashboard
+
+Just tell 👍

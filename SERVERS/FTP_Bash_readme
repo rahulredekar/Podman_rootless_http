@@ -1,0 +1,134 @@
+`SFTP_USER="sftpuser"` is just a **variable in the script**.
+
+It means:
+👉 “use this username for the SFTP account”
+
+---
+
+## 🟢 What it exactly does
+
+In Bash:
+
+```bash
+SFTP_USER="sftpuser"
+```
+
+This stores the text `sftpuser` inside a variable called `SFTP_USER`.
+
+So later in the script:
+
+```bash
+useradd -m -g sftpusers -s /usr/sbin/nologin $SFTP_USER
+```
+
+becomes:
+
+```bash
+useradd -m -g sftpusers -s /usr/sbin/nologin sftpuser
+```
+
+---
+
+## 🧠 Simple meaning
+
+| Part       | Meaning                  |
+| ---------- | ------------------------ |
+| SFTP_USER  | variable name            |
+| "sftpuser" | actual username          |
+| $SFTP_USER | used value inside script |
+
+---
+
+## 🟡 What YOU should do
+
+You have 2 options:
+
+---
+
+### ✅ Option 1: Keep it as it is (recommended for learning)
+
+```bash
+SFTP_USER="sftpuser"
+```
+
+This will create user:
+
+```text
+sftpuser
+```
+
+---
+
+### ✅ Option 2: Change to your own username
+
+Example:
+
+```bash
+SFTP_USER="john"
+```
+
+Now script creates:
+
+```text
+john
+```
+
+---
+
+## 🔵 Example real use
+
+If you change:
+
+```bash
+SFTP_USER="backupuser"
+```
+
+Then script will:
+
+* create Linux user → `backupuser`
+* SFTP login → `backupuser`
+* folder → `/sftp/backupuser/`
+
+---
+
+## ⚠️ Important rule
+
+Whatever you put here:
+
+```bash
+SFTP_USER="NAME"
+```
+
+MUST be:
+
+* lowercase
+* no spaces
+* valid Linux username
+
+❌ wrong:
+
+```bash
+SFTP_USER="My User"
+```
+
+✔ correct:
+
+```bash
+SFTP_USER="myuser"
+```
+
+---
+
+## 🟢 Final simple explanation
+
+👉 This line just decides the **SFTP login username the script will create**.
+
+---
+
+If you want, I can modify your script so it asks username like:
+
+```bash
+Enter username: _
+```
+
+(interactive version — more professional in real servers)
