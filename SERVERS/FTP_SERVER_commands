@@ -1,0 +1,374 @@
+Below is a **clean, 2026-ready, production SFTP configuration guide** for **RHEL 9 and Ubuntu 24.04**, from **basic → advanced → enterprise hardening**, with correct modern OpenSSH practices.
+
+---
+
+# 🟢 1. What is modern SFTP (2026)?
+
+SFTP runs inside SSH:
+
+```text
+SFTP = SSH subsystem (internal-sftp)
+```
+
+So:
+
+* ❌ No FTP server needed (vsftpd/proftpd not used)
+* ✅ Uses OpenSSH (`sshd`)
+* 🔐 Fully encrypted
+
+---
+
+# 🟢 2. INSTALL OPENSSH (BASIC SETUP)
+
+## RHEL 9
+
+```bash
+sudo dnf update -y
+sudo dnf install -y openssh-server
+sudo systemctl enable --now sshd
+```
+
+## Ubuntu 24.04
+
+```bash
+sudo apt update -y
+sudo apt install -y openssh-server
+sudo systemctl enable --now ssh
+```
+
+### Check service
+
+```bash
+ss -tulpn | grep ssh
+```
+
+---
+
+# 🟢 3. TEST DEFAULT SFTP
+
+```bash
+sftp localhost
+```
+
+If it connects → SSH/SFTP is working.
+
+---
+
+# 🟡 4. CREATE SFTP USER (BASIC)
+
+```bash
+sudo groupadd sftpusers
+sudo useradd -m -g sftpusers -s /usr/sbin/nologin sftpuser
+sudo passwd sftpuser
+```
+
+### Meaning:
+
+* no shell login
+* only SFTP allowed
+
+---
+
+# 🟡 5. CREATE DIRECTORY STRUCTURE (CHROOT)
+
+```bash
+sudo mkdir -p /sftp/sftpuser/upload
+```
+
+### Permissions (VERY IMPORTANT)
+
+```bash
+sudo chown root:root /sftp/sftpuser
+sudo chmod 755 /sftp/sftpuser
+
+sudo chown sftpuser:sftpusers /sftp/sftpuser/upload
+```
+
+### Why?
+
+* chroot folder must be owned by root
+* prevents escape from jail
+
+---
+
+# 🟡 6. BASIC SSH CONFIGURATION
+
+Edit config:
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+### Add:
+
+```text
+Subsystem sftp internal-sftp
+
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+```
+
+### Meaning:
+
+* internal-sftp = modern SFTP engine
+* disables insecure login methods
+
+---
+
+# 🟠 7. ENABLE CHROOT SFTP (IMPORTANT STEP)
+
+Add at end:
+
+```text
+Match Group sftpusers
+    ChrootDirectory /sftp/%u
+    ForceCommand internal-sftp
+    X11Forwarding no
+    AllowTcpForwarding no
+```
+
+### Effect:
+
+* user is locked inside folder
+* cannot access system shell
+
+---
+
+# 🟠 8. VALIDATE CONFIG
+
+```bash
+sudo sshd -t
+```
+
+(no output = OK)
+
+---
+
+# 🟠 9. RESTART SSH SERVICE
+
+## RHEL 9
+
+```bash
+sudo systemctl restart sshd
+```
+
+## Ubuntu 24
+
+```bash
+sudo systemctl restart ssh
+```
+
+---
+
+# 🟠 10. OPEN FIREWALL
+
+## RHEL 9 (firewalld)
+
+```bash
+sudo firewall-cmd --permanent --add-service=ssh
+sudo firewall-cmd --reload
+```
+
+## Ubuntu 24 (ufw)
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw enable
+```
+
+---
+
+# 🔵 11. CLIENT SETUP (MODERN)
+
+## Install client tools
+
+### RHEL 9
+
+```bash
+sudo dnf install -y openssh-clients
+```
+
+### Ubuntu 24
+
+```bash
+sudo apt install -y openssh-client
+```
+
+---
+
+# 🔵 12. GENERATE SSH KEY (MODERN 2026 STANDARD)
+
+```bash
+ssh-keygen -t ed25519 -a 100
+```
+
+### Why ed25519?
+
+* faster
+* stronger than RSA
+* modern standard
+
+---
+
+# 🔵 13. COPY KEY TO SERVER
+
+```bash
+ssh-copy-id sftpuser@SERVER_IP
+```
+
+---
+
+# 🔵 14. CONNECT USING SFTP
+
+```bash
+sftp sftpuser@SERVER_IP
+```
+
+---
+
+# 🔵 15. BASIC SFTP COMMANDS
+
+Inside session:
+
+| Command  | Function          |
+| -------- | ----------------- |
+| ls       | list server files |
+| pwd      | server directory  |
+| lpwd     | local directory   |
+| put file | upload            |
+| get file | download          |
+| mkdir    | create folder     |
+| bye      | exit              |
+
+---
+
+# 🔵 16. NON-INTERACTIVE (AUTOMATION)
+
+```bash
+sftp sftpuser@SERVER_IP <<EOF
+put file.txt
+bye
+EOF
+```
+
+---
+
+# 🔴 17. ADVANCED SECURITY HARDENING
+
+Edit `/etc/ssh/sshd_config`:
+
+```text
+AuthenticationMethods publickey
+PermitEmptyPasswords no
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+UseDNS no
+```
+
+---
+
+## Strong modern encryption (optional but recommended)
+
+```text
+KexAlgorithms curve25519-sha256
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com
+```
+
+---
+
+# 🔴 18. SELINUX (RHEL 9 IMPORTANT)
+
+```bash
+sudo dnf install -y policycoreutils-python-utils
+
+sudo semanage fcontext -a -t ssh_home_t "/sftp(/.*)?"
+sudo restorecon -Rv /sftp
+```
+
+Optional fix:
+
+```bash
+setsebool -P ssh_chroot_rw_homedirs on
+```
+
+---
+
+# 🔴 19. LOGGING & MONITORING
+
+## RHEL 9
+
+```bash
+journalctl -u sshd -f
+tail -f /var/log/secure
+```
+
+## Ubuntu 24
+
+```bash
+journalctl -u ssh -f
+tail -f /var/log/auth.log
+```
+
+---
+
+# 🔴 20. TROUBLESHOOTING
+
+### Permission denied
+
+```bash
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys
+```
+
+### Chroot error
+
+* check root ownership of /sftp/user
+
+### SSH config error
+
+```bash
+sshd -t
+```
+
+---
+
+# 🟣 FINAL PRODUCTION ARCHITECTURE
+
+```text
+OpenSSH Server
+ ├── internal-sftp
+ ├── SSH Key Auth only
+ ├── Chroot Jail (/sftp/user)
+ ├── No root login
+ ├── Firewall enabled
+ ├── SELinux enforced (RHEL)
+ └── Logging + monitoring
+```
+
+---
+
+# 🟢 FINAL SUMMARY (2026 STANDARD)
+
+✔ SFTP = SSH-based secure file transfer
+✔ No FTP required
+✔ Key-based authentication only
+✔ Chroot jailed users
+✔ Hardened SSH config
+✔ Firewall + SELinux enabled
+✔ Enterprise-ready
+
+---
+
+If you want next level, I can give you:
+
+* 🔥 1-click automation script (RHEL + Ubuntu combined)
+* 🔥 Ansible playbook (DevOps production standard)
+* 🔥 Multi-user enterprise SFTP server design
+* 🔥 AWS / cloud SFTP architecture
+* 🔥 Zero-trust SFTP (VPN + MFA + IAM style)
+
+Just tell 👍
+
