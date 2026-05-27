@@ -1,0 +1,340 @@
+Here is your **FINAL 2026 MODERN NFS SETUP (SERVER + CLIENT) with clear separation + command purpose + SELinux included + production standard)**
+
+---
+
+# 🧠 2026 MODERN NFS (FINAL PRODUCTION CHEATSHEET)
+
+Core stack:
+
+* NFS
+* SELinux
+* autofs
+* systemd
+
+---
+
+# 🟢 1. SERVER SIDE (RHEL 9 / 10 / Ubuntu 24)
+
+---
+
+## 📌 1. INSTALL NFS SERVER
+
+### 🟥 RHEL
+
+```bash id="srv1"
+sudo dnf install -y nfs-utils
+```
+
+### 🟦 Ubuntu
+
+```bash id="srv2"
+sudo apt install -y nfs-kernel-server
+```
+
+👉 Installs NFS server daemon and tools
+
+---
+
+## 📌 2. ENABLE NFS SERVICE
+
+```bash id="srv3"
+sudo systemctl enable --now nfs-server
+```
+
+👉 Starts NFS service and enables auto-start at boot
+
+---
+
+## 📌 3. CREATE SHARE DIRECTORY
+
+```bash id="srv4"
+sudo mkdir -p /srv/nfs/share
+sudo chmod 755 /srv/nfs/share
+```
+
+👉 Creates export folder for clients
+
+---
+
+## 📌 4. SELINUX CONFIGURATION (RHEL ONLY)
+
+### Check SELinux
+
+```bash id="srv5"
+getenforce
+```
+
+👉 Must be `Enforcing` in production
+
+---
+
+### Allow NFS export access
+
+```bash id="srv6"
+sudo setsebool -P nfs_export_all_rw on
+```
+
+👉 Allows NFS to read/write exported directories
+
+---
+
+### Set correct security context
+
+```bash id="srv7"
+sudo semanage fcontext -a -t public_content_rw_t "/srv/nfs(/.*)?"
+sudo restorecon -Rv /srv/nfs
+```
+
+👉 Ensures SELinux allows safe NFS access
+
+---
+
+## 📌 5. CONFIGURE EXPORTS
+
+```bash id="srv8"
+sudo nano /etc/exports
+```
+
+### Add:
+
+```bash id="srv9"
+/srv/nfs/share 192.168.1.0/24(rw,sync,root_squash,no_subtree_check)
+```
+
+👉 Defines which clients can access NFS
+
+---
+
+## 📌 6. APPLY EXPORTS
+
+```bash id="srv10"
+sudo exportfs -rav
+```
+
+👉 Activates export configuration
+
+```bash id="srv11"
+sudo exportfs -v
+```
+
+👉 Shows active shares
+
+---
+
+## 📌 7. FIREWALL (SERVER SIDE)
+
+### RHEL
+
+```bash id="srv12"
+sudo firewall-cmd --permanent --add-service=nfs
+sudo firewall-cmd --reload
+```
+
+👉 Opens NFS ports safely
+
+---
+
+### Ubuntu
+
+```bash id="srv13"
+sudo ufw allow from 192.168.1.0/24 to any port 2049 proto tcp
+```
+
+---
+
+## 📌 8. VERIFY SERVER
+
+```bash id="srv14"
+ss -tulpn | grep 2049
+```
+
+👉 Confirms NFS service is listening
+
+---
+
+# 🟡 2. CLIENT SIDE (RHEL / UBUNTU)
+
+---
+
+## 📌 1. INSTALL NFS CLIENT
+
+```bash id="cli1"
+sudo dnf install -y nfs-utils
+sudo apt install -y nfs-common
+```
+
+👉 Installs tools to connect to NFS server
+
+---
+
+## 📌 2. CREATE MOUNT POINT
+
+```bash id="cli2"
+sudo mkdir -p /mnt/nfs
+```
+
+👉 Local directory where NFS is mounted
+
+---
+
+## 📌 3. MANUAL MOUNT TEST
+
+```bash id="cli3"
+sudo mount -t nfs4 server_ip:/srv/nfs/share /mnt/nfs
+```
+
+👉 Temporary mount test (checks connectivity)
+
+---
+
+## 📌 4. VERIFY MOUNT
+
+```bash id="cli4"
+df -h | grep nfs
+nfsstat -m
+```
+
+👉 Confirms active NFS mount
+
+---
+
+## 📌 5. TEST WRITE ACCESS
+
+```bash id="cli5"
+touch /mnt/nfs/testfile
+```
+
+👉 Verifies permissions + ACL working
+
+---
+
+# 🟢 3. SYSTEMD AUTOMOUNT (BEST PRACTICE 2026)
+
+---
+
+## 📌 WHEN TO USE
+
+✔ Small/medium environments
+✔ Stable servers
+✔ Avoid boot hang issues
+
+---
+
+## 📌 /etc/fstab (CLIENT)
+
+```bash id="cli6"
+server_ip:/srv/nfs/share /mnt/nfs nfs4 defaults,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600 0 0
+```
+
+👉 Auto-mounts only when accessed (safe boot)
+
+---
+
+## 📌 APPLY
+
+```bash id="cli7"
+sudo systemctl daemon-reload
+sudo mount -a
+```
+
+---
+
+# 🟡 4. AUTOFS (ENTERPRISE SCALE)
+
+---
+
+## 📌 WHEN TO USE
+
+✔ Large enterprise
+✔ Many users / home directories
+✔ Dynamic mounts on demand
+
+---
+
+## 📌 INSTALL
+
+```bash id="af1"
+sudo dnf install -y autofs
+sudo apt install -y autofs
+```
+
+---
+
+## 📌 ENABLE
+
+```bash id="af2"
+sudo systemctl enable --now autofs
+```
+
+---
+
+## 📌 MASTER MAP
+
+```bash id="af3"
+/mnt/nfs /etc/auto.nfs --timeout=300 --ghost
+```
+
+👉 Defines mount root + timeout
+
+---
+
+## 📌 MAP FILE
+
+```bash id="af4"
+share -fstype=nfs4 server_ip:/srv/nfs/share
+```
+
+👉 Defines actual mount target
+
+---
+
+## 📌 RESTART
+
+```bash id="af5"
+sudo systemctl restart autofs
+```
+
+---
+
+## 📌 TEST
+
+```bash id="af6"
+ls /mnt/nfs/share
+```
+
+👉 Triggers automatic mount
+
+---
+
+# 🧠 FINAL ARCHITECTURE (2026)
+
+```text id="arch"
+SERVER:
+✔ NFSv4
+✔ SELinux enforcing (RHEL)
+✔ ACL enabled
+✔ firewall restricted
+✔ root_squash enabled
+
+CLIENT:
+✔ systemd automount OR autofs
+✔ no direct root trust
+✔ controlled mount access
+```
+
+---
+
+# ⚡ FINAL ONE-LINE (INTERVIEW READY)
+
+> Modern NFS in 2026 uses NFSv4 with SELinux enforcement, ACL-based permissions, firewall restrictions, and either systemd automount or autofs depending on environment scale for secure enterprise file sharing.
+
+---
+
+If you want next level, I can give:
+
+* 🔐 Kerberos-secured NFS (bank-grade authentication)
+* ⚙️ Ansible automation (fully hands-free deployment)
+* 🧨 Real production troubleshooting scenarios
+* ☁️ Kubernetes + NFS storage backend design
+
+Just tell 👍

@@ -1,0 +1,290 @@
+Here is your **FINAL 2026 PRODUCTION-GRADE SMB (SAMBA) SETUP** with:
+
+✔ Server side + client side
+✔ Advanced security + SELinux + ACL
+✔ Systemd + firewall
+✔ SMB3 hardened config
+✔ Clean enterprise structure (RHEL 9/10 + Ubuntu 24)
+
+---
+
+# 🧠 2026 FINAL SECURE SMB SETUP (PRODUCTION)
+
+Core service:
+
+* Samba
+* SELinux (RHEL security layer)
+* CIFS client tools
+
+---
+
+# 🟢 1. ARCHITECTURE
+
+```text id="arch_final"
+Client (Windows/Linux)
+        ↓ SMB3 (Encrypted)
+Samba Server (Linux)
+        ↓
+Filesystem + ACL + SELinux + Firewall
+```
+
+---
+
+# 🟢 2. SERVER SIDE SETUP (RHEL 9/10 + Ubuntu 24)
+
+---
+
+## 📌 INSTALL SAMBA
+
+### RHEL
+
+```bash id="srv1"
+sudo dnf install -y samba samba-client samba-common acl policycoreutils-python-utils
+```
+
+### Ubuntu
+
+```bash id="srv2"
+sudo apt update
+sudo apt install -y samba acl
+```
+
+---
+
+## 📌 ENABLE SERVICES
+
+```bash id="srv3"
+sudo systemctl enable --now smb nmb
+```
+
+---
+
+## 📌 CREATE SHARE DIRECTORY
+
+```bash id="srv4"
+sudo mkdir -p /srv/samba/share
+sudo chmod 2770 /srv/samba/share
+sudo chown -R root:users /srv/samba/share
+```
+
+---
+
+# 🟢 3. ACL CONFIGURATION (SERVER SIDE)
+
+```bash id="acl1"
+sudo setfacl -m g:users:rwx /srv/samba/share
+sudo setfacl -m d:g:users:rwx /srv/samba/share
+```
+
+---
+
+Verify:
+
+```bash id="acl2"
+getfacl /srv/samba/share
+```
+
+---
+
+# 🟢 4. SELINUX (RHEL ONLY – MANDATORY)
+
+```bash id="se1"
+sudo setsebool -P samba_export_all_rw on
+```
+
+```bash id="se2"
+sudo semanage fcontext -a -t samba_share_t "/srv/samba(/.*)?"
+sudo restorecon -Rv /srv/samba
+```
+
+Check:
+
+```bash id="se3"
+getenforce
+```
+
+Expected:
+
+```text id="se4"
+Enforcing
+```
+
+---
+
+# 🟢 5. SAMBA CONFIGURATION (SERVER SIDE)
+
+Edit:
+
+```bash id="cfg1"
+sudo nano /etc/samba/smb.conf
+```
+
+---
+
+## 🔐 FINAL HARDENED CONFIG
+
+```ini id="cfg2"
+[global]
+   workgroup = WORKGROUP
+   security = user
+   map to guest = never
+
+   server min protocol = SMB2
+   server max protocol = SMB3
+
+   smb encrypt = required
+   ntlm auth = no
+
+[share]
+   path = /srv/samba/share
+   browseable = yes
+   writable = yes
+   valid users = @users
+   guest ok = no
+```
+
+---
+
+## APPLY CONFIG
+
+```bash id="cfg3"
+testparm
+sudo systemctl restart smb nmb
+```
+
+---
+
+# 🟢 6. FIREWALL (SERVER SIDE)
+
+### RHEL
+
+```bash id="fw1"
+sudo firewall-cmd --permanent --add-service=samba
+sudo firewall-cmd --reload
+```
+
+### Ubuntu
+
+```bash id="fw2"
+sudo ufw allow samba
+```
+
+---
+
+# 🟢 7. CLIENT SIDE SETUP
+
+---
+
+## 📌 INSTALL CLIENT
+
+```bash id="cli1"
+sudo dnf install -y cifs-utils || sudo apt install -y cifs-utils
+```
+
+---
+
+## 📌 CREATE MOUNT POINT
+
+```bash id="cli2"
+sudo mkdir -p /mnt/smb
+```
+
+---
+
+## 📌 CREDENTIAL FILE (SECURE)
+
+```bash id="cli3"
+sudo nano /etc/samba/cred
+```
+
+```text id="cli4"
+username=smbuser
+password=StrongPassword
+```
+
+```bash id="cli5"
+sudo chmod 600 /etc/samba/cred
+```
+
+---
+
+## 📌 MANUAL MOUNT
+
+```bash id="cli6"
+sudo mount -t cifs //server_ip/share /mnt/smb \
+-o credentials=/etc/samba/cred,vers=3.1.1,_netdev
+```
+
+---
+
+## 📌 VERIFY
+
+```bash id="cli7"
+df -h | grep smb
+```
+
+---
+
+## 📌 TEST WRITE
+
+```bash id="cli8"
+touch /mnt/smb/testfile
+```
+
+---
+
+# 🟢 8. AUTO MOUNT (PRODUCTION BEST PRACTICE)
+
+```bash id="auto1"
+//server_ip/share /mnt/smb cifs credentials=/etc/samba/cred,vers=3.1.1,_netdev,nofail 0 0
+```
+
+Apply:
+
+```bash id="auto2"
+sudo systemctl daemon-reload
+sudo mount -a
+```
+
+---
+
+# 🧠 9. SECURITY MODEL (IMPORTANT)
+
+## SERVER SIDE
+
+✔ SMB3 encryption
+✔ SELinux enforcement
+✔ ACL control
+✔ firewall restriction
+✔ no guest access
+
+## CLIENT SIDE
+
+✔ credentials file
+✔ SMB version locked
+✔ no plaintext passwords in fstab
+
+---
+
+# ⚡ 10. FINAL ENTERPRISE SUMMARY
+
+```text id="final"
+Samba (SMB3) + ACL + SELinux + firewall + encrypted transport + secure credentials = 2026 enterprise file sharing standard
+```
+
+---
+
+# 🧠 ONE-LINE INTERVIEW ANSWER
+
+> Modern SMB setup in 2026 uses Samba with SMB3 encryption, SELinux enforcement, ACL-based permissions, firewall restriction, and secure CIFS client mounts using credential files.
+
+---
+
+If you want next level, I can give:
+
+* 🔐 Active Directory + Samba domain integration
+* ⚙️ Ansible automation (fully automated SMB setup)
+* 🧨 Real troubleshooting scenarios (interview + production issues)
+* ☁️ Hybrid cloud SMB architecture (AWS / Azure file shares)
+
+Just tell 👍
