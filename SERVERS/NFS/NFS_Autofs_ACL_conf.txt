@@ -1,0 +1,379 @@
+Good — this is already very close to real enterprise documentation. I’ll refine it slightly so it becomes **technically accurate + production-correct for 2026 Linux environments** (RHEL 9/10 + Ubuntu 24).
+
+---
+
+# 🧠 FINAL 2026 MODERN NFS + ACL + AUTOFS CHEATSHEET (PRODUCTION READY)
+
+---
+
+# 🟢 PART 1 — NFS SERVER (RHEL 9 / 10 / Ubuntu 24)
+
+---
+
+## 📌 Install NFS Server
+
+### 🟥 RHEL 9 / 10
+
+```bash
+sudo dnf install -y nfs-utils
+```
+
+### 🟦 Ubuntu 24
+
+```bash
+sudo apt update
+sudo apt install -y nfs-kernel-server
+```
+
+👉 Installs NFS server components
+
+---
+
+## 📌 Enable Service
+
+```bash
+sudo systemctl enable --now nfs-server
+```
+
+👉 Starts and enables NFS service at boot
+
+---
+
+## 📌 Create Export Directory
+
+```bash
+sudo mkdir -p /srv/nfs/share
+sudo chmod 755 /srv/nfs/share
+```
+
+👉 Creates shared directory (standard export path)
+
+---
+
+## 📌 Install ACL Support (IMPORTANT)
+
+### RHEL / Ubuntu
+
+```bash
+sudo dnf install -y acl 2>/dev/null || sudo apt install -y acl
+```
+
+👉 Enables advanced permission control
+
+---
+
+## 📌 Configure ACL (SERVER SECURITY)
+
+### User access
+
+```bash
+sudo setfacl -m u:john:rw /srv/nfs/share
+```
+
+👉 Grants read/write to user
+
+---
+
+### Group access
+
+```bash
+sudo setfacl -m g:devteam:rwx /srv/nfs/share
+```
+
+👉 Grants group access
+
+---
+
+### Default inheritance
+
+```bash
+sudo setfacl -m d:u:john:rw /srv/nfs/share
+```
+
+👉 New files inherit permissions
+
+---
+
+### View ACL
+
+```bash
+getfacl /srv/nfs/share
+```
+
+---
+
+### Remove ACL
+
+```bash
+sudo setfacl -x u:john /srv/nfs/share
+sudo setfacl -b /srv/nfs/share
+```
+
+---
+
+## 📌 Configure NFS Export
+
+```bash
+sudo nano /etc/exports
+```
+
+```bash
+/srv/nfs/share 192.168.1.0/24(rw,sync,root_squash,no_subtree_check)
+```
+
+👉 Controls client access + security
+
+---
+
+## 📌 Apply Export
+
+```bash
+sudo exportfs -rav
+sudo exportfs -v
+```
+
+---
+
+## 📌 Firewall (SERVER)
+
+### RHEL
+
+```bash
+sudo firewall-cmd --permanent --add-service=nfs
+sudo firewall-cmd --reload
+```
+
+### Ubuntu
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 2049 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 111 proto tcp
+```
+
+---
+
+## 📌 Verify Server
+
+```bash
+ss -tulpn | grep 2049
+exportfs -v
+```
+
+---
+
+# 🟡 PART 2 — NFS CLIENT
+
+---
+
+## 📌 Install Client
+
+### RHEL
+
+```bash
+sudo dnf install -y nfs-utils
+```
+
+### Ubuntu
+
+```bash
+sudo apt install -y nfs-common
+```
+
+---
+
+## 📌 Create Mount Point
+
+```bash
+sudo mkdir -p /mnt/nfs
+```
+
+---
+
+## 📌 Manual Mount Test
+
+```bash
+sudo mount -t nfs4 server_ip:/srv/nfs/share /mnt/nfs
+```
+
+---
+
+## 📌 Verify Mount
+
+```bash
+df -h | grep nfs
+nfsstat -m
+```
+
+---
+
+## 📌 Test ACL Access
+
+```bash
+touch /mnt/nfs/testfile
+```
+
+---
+
+# 🟢 PART 3 — SYSTEMD AUTOMOUNT (BEST PRACTICE 2026)
+
+## 📌 /etc/fstab (CLIENT)
+
+```bash
+server_ip:/srv/nfs/share /mnt/nfs nfs4 defaults,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600 0 0
+```
+
+---
+
+## 📌 Apply
+
+```bash
+sudo systemctl daemon-reload
+sudo mount -a
+```
+
+👉 Prevents boot hang + enables lazy mount
+
+---
+
+# 🟡 PART 4 — AUTOFS (ENTERPRISE SCALE)
+
+---
+
+## 📌 Install AutoFS (CLIENT ONLY)
+
+```bash
+sudo dnf install -y autofs 2>/dev/null || sudo apt install -y autofs
+```
+
+---
+
+## 📌 Enable Service
+
+```bash
+sudo systemctl enable --now autofs
+```
+
+---
+
+## 📌 Master Map
+
+```bash
+sudo nano /etc/auto.master
+```
+
+```bash
+/mnt/nfs /etc/auto.nfs --timeout=300 --ghost
+```
+
+---
+
+## 📌 Map File
+
+```bash
+sudo nano /etc/auto.nfs
+```
+
+```bash
+share -fstype=nfs4 server_ip:/srv/nfs/share
+```
+
+---
+
+## 📌 Restart
+
+```bash
+sudo systemctl restart autofs
+```
+
+---
+
+## 📌 Test
+
+```bash
+ls /mnt/nfs/share
+```
+
+---
+
+## 📌 Logs
+
+```bash
+journalctl -u autofs -f
+```
+
+---
+
+# 🧠 WHEN / WHY / WHERE (IMPORTANT CLARITY)
+
+## 📌 1. /etc/fstab (SYSTEMD AUTOMOUNT)
+
+✔ Use when:
+
+* small/medium environments
+* persistent mounts needed
+* simplicity required
+
+✔ Why:
+
+* built into systemd
+* stable + simple
+* prevents boot hang
+
+---
+
+## 📌 2. AUTOFS
+
+✔ Use when:
+
+* large enterprise
+* many mounts (home dirs, shared clusters)
+* dynamic/on-demand access
+
+✔ Why:
+
+* mounts only when accessed
+* reduces boot load
+* scalable
+
+---
+
+## 📌 3. NFS SERVER
+
+✔ Use when:
+
+* central file sharing required
+* shared storage needed across Linux systems
+
+---
+
+# 🧠 FINAL ARCHITECTURE (2026)
+
+```text
+NFS Server:
+✔ NFSv4
+✔ root_squash
+✔ ACL enabled
+✔ firewall restricted
+
+Clients:
+✔ systemd automount OR autofs
+✔ no direct root access
+✔ UID/GID consistency (or LDAP)
+```
+
+---
+
+# ⚡ FINAL ONE-LINE
+
+> Modern NFS in 2026 combines NFSv4, ACL-based security, firewall restrictions, and either systemd automount or autofs depending on scale and enterprise requirements.
+
+---
+
+If you want next level, I can give:
+
+* 🔐 Kerberos-secured NFS (bank-grade authentication)
+* ⚙️ Ansible automation playbook (full deployment)
+* 🧨 Real troubleshooting interview scenarios
+* ☁️ Kubernetes + NFS storage backend design
+
+Just tell 👍
