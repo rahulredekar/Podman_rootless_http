@@ -1,0 +1,254 @@
+Here is your **FINAL 2026 production-ready Chrony NTP configuration**, fully clean, correct, and enterprise-standard for:
+
+* Red Hat Enterprise Linux 9
+* Red Hat Enterprise Linux 10
+* Ubuntu 24.04 LTS
+* Chrony
+
+---
+
+# 🧠 FINAL 2026 SECURE NTP (INDIA ONLY) – COMPLETE SETUP
+
+---
+
+# 🟢 1. SERVER SIDE (PRIMARY NTP SERVER)
+
+## 📍 CONFIG FILE PATH
+
+* RHEL:
+
+```text
+/etc/chrony.conf
+```
+
+* Ubuntu:
+
+```text
+/etc/chrony/chrony.conf
+```
+
+---
+
+## 📦 INSTALL
+
+### RHEL
+
+```bash
+sudo dnf install -y chrony
+```
+
+### Ubuntu
+
+```bash
+sudo apt update
+sudo apt install -y chrony
+```
+
+---
+
+## ▶️ ENABLE SERVICE
+
+### RHEL
+
+```bash
+sudo systemctl enable --now chronyd
+```
+
+### Ubuntu
+
+```bash
+sudo systemctl enable --now chrony
+```
+
+---
+
+## ⚙️ FINAL SERVER CONFIG (2026 PRODUCTION READY)
+
+```bash id="final_server"
+# 🇮🇳 India NTP upstream sources
+server time.nplindia.in iburst
+server samay1.nic.in iburst
+server samay2.nic.in iburst
+server time.nplindia.org iburst
+
+# System sync
+driftfile /var/lib/chrony/drift
+rtcsync
+makestep 1.0 3
+
+# 🔐 Security hardening
+cmdport 0
+
+# 🧠 Stability controls (IMPORTANT)
+maxdistance 3.0
+maxdelay 0.8
+minsources 2
+
+# 🌐 Allow internal clients only
+allow 192.168.1.0/24
+```
+
+---
+
+## 🔄 RESTART SERVER
+
+### RHEL
+
+```bash
+sudo systemctl restart chronyd
+```
+
+### Ubuntu
+
+```bash
+sudo systemctl restart chrony
+```
+
+---
+
+## 🔍 VERIFY SERVER
+
+```bash
+chronyc tracking
+chronyc sources -v
+```
+
+---
+
+## 🔥 FIREWALL (SERVER ONLY)
+
+### RHEL
+
+```bash
+sudo firewall-cmd --permanent --add-service=ntp
+sudo firewall-cmd --reload
+```
+
+### Ubuntu
+
+```bash
+sudo ufw allow 123/udp
+```
+
+---
+
+# 🟡 2. CLIENT SIDE (ALL SYSTEMS)
+
+---
+
+## 📦 INSTALL
+
+### RHEL
+
+```bash
+sudo dnf install -y chrony
+```
+
+### Ubuntu
+
+```bash
+sudo apt install -y chrony
+```
+
+---
+
+## ⚙️ CLIENT CONFIG FILE
+
+* RHEL:
+
+```text
+/etc/chrony.conf
+```
+
+* Ubuntu:
+
+```text
+/etc/chrony/chrony.conf
+```
+
+---
+
+## 🖥️ FINAL CLIENT CONFIG (BEST PRACTICE)
+
+```bash id="final_client"
+# Internal enterprise NTP server only
+server ntp.internal.local iburst
+```
+
+---
+
+## 🔄 RESTART CLIENT
+
+### RHEL
+
+```bash
+sudo systemctl restart chronyd
+```
+
+### Ubuntu
+
+```bash
+sudo systemctl restart chrony
+```
+
+---
+
+## 🔍 VERIFY CLIENT SYNC
+
+```bash
+chronyc tracking
+chronyc sources -v
+```
+
+---
+
+# 🧠 3. WHAT MAKES THIS “SECURE”
+
+✔ Internal-only time distribution
+✔ Controlled authoritative server
+✔ Firewall restricted access
+✔ Stability controls (maxdistance/maxdelay/minsources)
+✔ No direct client internet dependency
+
+---
+
+# ⚠️ SECURITY NOTE (IMPORTANT)
+
+This setup is:
+
+```text id="security_type"
+Secure by architecture (NOT encrypted)
+```
+
+For encrypted time sync, use:
+
+Network Time Security
+
+---
+
+# 🏁 FINAL ARCHITECTURE
+
+```text id="final_arch"
+India NTP Sources
+        ↓
+Internal Chrony Server (Secure Gateway)
+        ↓
+Enterprise Clients (RHEL / Ubuntu)
+```
+
+---
+
+# ⚡ FINAL ONE-LINE SUMMARY
+
+> In 2026 enterprise environments, Chrony is deployed in a hierarchical architecture where an internal NTP server synchronizes with trusted India sources and securely distributes consistent time to all Linux clients.
+
+---
+
+If you want next upgrade, I can give:
+
+✔ FULL NTS encrypted setup (true secure NTP)
+✔ HA dual-server failover design
+✔ Ansible automation script
+✔ Kubernetes time sync architecture
+
+Just tell 👍

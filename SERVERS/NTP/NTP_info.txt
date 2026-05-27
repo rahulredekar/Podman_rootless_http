@@ -1,0 +1,199 @@
+You’re referring to Indian NTP time sources. Let’s clarify it properly and then show a **correct NTP (chrony) configuration for RHEL 9 and Ubuntu 24**.
+
+---
+
+# 🧠 1. Which is Primary / Secondary NTP?
+
+These are **government time servers in India**:
+
+| Server              | Role                                     |
+| ------------------- | ---------------------------------------- |
+| `time.nplindia.in`  | Primary (NPL official time source)       |
+| `time.nplindia.org` | Secondary / alternate NPL mirror         |
+| `samay1.nic.in`     | Government NTP server (primary NIC pool) |
+| `samay2.nic.in`     | Backup NIC server                        |
+
+---
+
+## 🟢 Recommended priority order (best practice)
+
+For production NTP:
+
+### ⭐ Primary (preferred)
+
+```text
+time.nplindia.in
+```
+
+### ⭐ Secondary (fallback)
+
+```text
+samay1.nic.in
+```
+
+### ⭐ Tertiary fallback
+
+```text
+samay2.nic.in
+time.nplindia.org
+```
+
+---
+
+# 🧠 2. Modern NTP system in Linux (2026)
+
+Modern Linux does NOT use classic `ntpd` by default.
+
+It uses:
+
+* ✅ `chrony` (RHEL 9 standard)
+* ✅ `systemd-timesyncd` (Ubuntu fallback, but chrony recommended)
+
+We will use **chrony (best practice)**.
+
+---
+
+# 🟢 3. Install Chrony
+
+## RHEL 9
+
+```bash id="rhel1"
+sudo dnf install -y chrony
+sudo systemctl enable --now chronyd
+```
+
+## Ubuntu 24
+
+```bash id="ubu1"
+sudo apt update
+sudo apt install -y chrony
+sudo systemctl enable --now chrony
+```
+
+---
+
+# 🟢 4. Configure NTP servers
+
+Edit config file:
+
+## RHEL 9 / Ubuntu 24
+
+```bash id="cfg1"
+sudo nano /etc/chrony.conf
+```
+
+---
+
+## 🟡 Add these lines (FINAL CONFIG)
+
+```text id="ntp1"
+server time.nplindia.in iburst prefer
+server samay1.nic.in iburst
+server samay2.nic.in iburst
+server time.nplindia.org iburst
+
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+```
+
+---
+
+# 🧠 Explanation
+
+| Option     | Meaning                      |
+| ---------- | ---------------------------- |
+| `server`   | NTP source                   |
+| `iburst`   | faster sync at startup       |
+| `prefer`   | primary server priority      |
+| `makestep` | fixes large time differences |
+| `rtcsync`  | sync hardware clock          |
+
+---
+
+# 🟢 5. Restart Chrony
+
+## RHEL 9
+
+```bash id="r1"
+sudo systemctl restart chronyd
+```
+
+## Ubuntu 24
+
+```bash id="u1"
+sudo systemctl restart chrony
+```
+
+---
+
+# 🟢 6. Verify NTP sync
+
+```bash id="v1"
+chronyc sources -v
+```
+
+Check sync status:
+
+```bash id="v2"
+chronyc tracking
+```
+
+---
+
+# 🟢 7. Force sync (if time is wrong)
+
+```bash id="f1"
+sudo chronyc makestep
+```
+
+---
+
+# 🧠 8. Correct Production Order (Best Practice)
+
+Final recommended priority:
+
+```text id="p1"
+1. time.nplindia.in        (Primary)
+2. samay1.nic.in           (Secondary)
+3. samay2.nic.in           (Backup)
+4. time.nplindia.org       (Fallback)
+```
+
+---
+
+# ⚠️ Important Notes
+
+* Always use **at least 2–3 servers**
+* Avoid relying on a single NTP source
+* Ensure UDP port 123 is open
+
+Firewall:
+
+## RHEL
+
+```bash id="fw1"
+sudo firewall-cmd --add-service=ntp --permanent
+sudo firewall-cmd --reload
+```
+
+---
+
+# 🟢 Final Summary
+
+✔ Primary: `time.nplindia.in`
+✔ Secondary: `samay1.nic.in`
+✔ Backup: `samay2.nic.in`
+✔ Best tool: `chrony`
+✔ Port: UDP 123
+
+---
+
+If you want, I can also give you:
+
+* 🔥 NTP server setup (your own internal time server)
+* 🔥 Active Directory time sync design
+* 🔥 Cloud NTP architecture (AWS/Azure/GCP)
+* 🔥 One-line automation script for all servers
+
+Just tell 👍
