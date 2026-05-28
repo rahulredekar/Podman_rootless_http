@@ -1,0 +1,176 @@
+Good — your corrected version is already very close to real RHEL 9/10 behavior. I’ll tighten it into a **fully clean, production-final DHCP setup (no optional/incorrect paths, only what actually works in 2026 RHEL)**.
+
+---
+
+# 🏗️ FINAL PRODUCTION DHCP SETUP (RHEL 9/10 – 2026)
+
+## 📍 Architecture
+
+```text
+dhcp1 (192.168.83.10) → DHCP SERVER
+   ↓
+Clients (192.168.83.100–200)
+   ↓
+DNS: 192.168.83.6 / 192.168.83.7
+Gateway: 192.168.83.1
+```
+
+---
+
+# 🔵 1. STATIC IP CONFIG (dhcp1)
+
+## 📍 RUN ON: dhcp1
+
+```bash id="ip1"
+nmcli dev status
+```
+
+```bash id="ip2"
+sudo nmcli con mod ens33 ipv4.addresses 192.168.83.10/24
+sudo nmcli con mod ens33 ipv4.gateway 192.168.83.1
+sudo nmcli con mod ens33 ipv4.dns "192.168.83.6 192.168.83.7"
+sudo nmcli con mod ens33 ipv4.method manual
+sudo nmcli con up ens33
+```
+
+```bash id="ip3"
+ip a
+```
+
+**✔ Sets static IP for DHCP server**
+
+---
+
+# 🔵 2. INSTALL DHCP SERVER
+
+## 📍 RUN ON: dhcp1
+
+```bash id="dh1"
+sudo dnf install dhcp-server -y
+```
+
+**✔ Installs ISC DHCP server**
+
+---
+
+# 🔵 3. DHCP CONFIGURATION
+
+## 📍 RUN ON: dhcp1
+
+```bash id="dh2"
+sudo vim /etc/dhcp/dhcpd.conf
+```
+
+```conf id="dh3"
+default-lease-time 600;
+max-lease-time 7200;
+authoritative;
+
+subnet 192.168.83.0 netmask 255.255.255.0 {
+
+    range 192.168.83.100 192.168.83.200;
+
+    option routers 192.168.83.1;
+
+    option domain-name "vaibhav.com";
+
+    option domain-name-servers 192.168.83.6, 192.168.83.7;
+
+    option broadcast-address 192.168.83.255;
+}
+```
+
+**✔ Defines IP pool + gateway + DNS**
+
+---
+
+# 🔵 4. SYSTEMD INTERFACE BIND (CORRECT METHOD)
+
+## 📍 RUN ON: dhcp1
+
+```bash id="sys1"
+sudo systemctl edit dhcpd
+```
+
+```ini id="sys2"
+[Service]
+Environment="DHCPDARGS=ens33"
+```
+
+**✔ Proper RHEL 9/10 method for interface binding**
+
+---
+
+# 🔵 5. START DHCP SERVICE
+
+## 📍 RUN ON: dhcp1
+
+```bash id="srv1"
+sudo systemctl enable --now dhcpd
+```
+
+```bash id="srv2"
+sudo systemctl restart dhcpd
+```
+
+```bash id="srv3"
+sudo systemctl status dhcpd
+```
+
+**✔ Ensures DHCP service is running**
+
+---
+
+# 🔥 6. FIREWALL (PRODUCTION CORRECT)
+
+## 📍 RUN ON: dhcp1
+
+```bash id="fw1"
+sudo firewall-cmd --permanent --add-service=dhcp
+sudo firewall-cmd --reload
+```
+
+**✔ Allows DHCP traffic safely**
+
+---
+
+# 🧪 7. CLIENT TEST
+
+## 📍 RUN ON CLIENTS
+
+```bash id="cl1"
+sudo dhclient -v
+```
+
+```bash id="cl2"
+ip a
+```
+
+```bash id="cl3"
+ip route
+```
+
+---
+
+# 🏁 FINAL RESULT
+
+✔ dhcp1 static IP configured correctly
+✔ DHCP service bound via systemd (RHEL 9/10 method)
+✔ Clean IP pool distribution (100–200)
+✔ DNS integrated with cache layer
+✔ Secure firewall enabled
+✔ Fully production-ready DHCP system (2026 standard)
+
+---
+
+# 🚀 OPTIONAL NEXT UPGRADES
+
+If you want to go enterprise level:
+
+* 🔥 DHCP Failover Cluster (active-active redundancy)
+* 🔥 PXE Boot Server (network OS installation)
+* 🔥 VLAN-based DHCP scopes
+* 🔥 Dynamic DNS integration with BIND
+* 🔥 IPAM-style enterprise network control system
+
+Just tell 👍
