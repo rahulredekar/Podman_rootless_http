@@ -1,0 +1,297 @@
+Below is your **FINAL PRODUCTION DNS SET (2026)** with **CLEAR SERVER-WISE COMMAND LABELS** so you know exactly **which command runs on which system**.
+
+---
+
+# 🏗️ FINAL ARCHITECTURE
+
+```text id="arch1"
+CLIENTS (100+)
+   ↓
+cache1 (192.168.83.6)
+cache2 (192.168.83.7)
+   ↓
+pri1 (192.168.83.4) → MASTER DNS + DNSSEC
+sec2 (192.168.83.5) → SLAVE DNS
+```
+
+Using:
+
+* BIND 9
+* Unbound
+
+---
+
+# 🔐 STEP 1 — SELinux (ALL SERVERS)
+
+## 📍 RUN ON: pri1, sec2, cache1, cache2
+
+```bash id="s1"
+sudo dnf install policycoreutils-python-utils -y
+```
+
+```bash id="s2"
+getenforce
+```
+
+```bash id="s3"
+sudo setenforce 1
+```
+
+```bash id="s4"
+sudo sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+```
+
+```bash id="s5"
+sudo restorecon -Rv /var/named
+```
+
+---
+
+# 🔵 STEP 2 — PRIMARY DNS (MASTER)
+
+## 📍 RUN ON: pri1 (192.168.83.4)
+
+---
+
+```bash id="p1"
+sudo dnf install bind bind-utils -y
+```
+
+---
+
+```bash id="p2"
+sudo semanage port -a -t dns_port_t -p tcp 53 2>/dev/null || sudo semanage port -m -t dns_port_t -p tcp 53
+sudo semanage port -a -t dns_port_t -p udp 53 2>/dev/null || sudo semanage port -m -t dns_port_t -p udp 53
+```
+
+---
+
+```bash id="p3"
+sudo semanage fcontext -a -t named_zone_t "/var/named(/.*)?"
+sudo restorecon -Rv /var/named
+```
+
+---
+
+```bash id="p4"
+sudo vim /etc/named.conf
+```
+
+---
+
+```conf id="p5"
+options {
+    directory "/var/named";
+    listen-on port 53 { any; };
+
+    allow-query { any; };
+    recursion no;
+
+    allow-transfer { 192.168.83.5; };
+
+    dnssec-validation auto;
+};
+
+zone "vaibhav.com" IN {
+    type master;
+    file "vaibhav.com.zone.signed";
+};
+```
+
+---
+
+## DNSSEC (PRI1 ONLY)
+
+```bash id="p6"
+cd /var/named
+sudo dnssec-keygen -a RSASHA256 -b 2048 -n ZONE vaibhav.com
+sudo dnssec-keygen -f KSK -a RSASHA256 -b 4096 -n ZONE vaibhav.com
+```
+
+---
+
+```bash id="p7"
+sudo dnssec-signzone -A -o vaibhav.com -f /var/named/vaibhav.com.zone.signed /var/named/vaibhav.com.zone
+```
+
+---
+
+```bash id="p8"
+sudo rndc reload
+```
+
+---
+
+```bash id="p9"
+sudo systemctl enable --now named
+sudo systemctl restart named
+```
+
+---
+
+```bash id="p10"
+sudo firewall-cmd --permanent --add-service=dns
+sudo firewall-cmd --reload
+```
+
+---
+
+# 🔵 STEP 3 — SECONDARY DNS (SLAVE)
+
+## 📍 RUN ON: sec2 (192.168.83.5)
+
+---
+
+```bash id="s1a"
+sudo dnf install bind bind-utils -y
+```
+
+---
+
+```bash id="s1b"
+sudo vim /etc/named.conf
+```
+
+---
+
+```conf id="s1c"
+zone "vaibhav.com" {
+    type slave;
+    masters { 192.168.83.4; };
+    file "slaves/vaibhav.com.zone";
+};
+```
+
+---
+
+```bash id="s1d"
+sudo systemctl enable --now named
+sudo systemctl restart named
+```
+
+---
+
+```bash id="s1e"
+sudo firewall-cmd --permanent --add-service=dns
+sudo firewall-cmd --reload
+```
+
+---
+
+# 🟣 STEP 4 — CACHE DNS (Unbound)
+
+## 📍 RUN ON: cache1 (192.168.83.6) AND cache2 (192.168.83.7)
+
+---
+
+```bash id="c1"
+sudo dnf install unbound -y
+```
+
+---
+
+```bash id="c2"
+sudo unbound-anchor -a /var/lib/unbound/root.key
+sudo chown unbound:unbound /var/lib/unbound/root.key
+sudo chmod 600 /var/lib/unbound/root.key
+```
+
+---
+
+```bash id="c3"
+sudo systemctl enable --now unbound-anchor.timer
+```
+
+---
+
+```bash id="c4"
+sudo vim /etc/unbound/unbound.conf
+```
+
+---
+
+```conf id="c5"
+server:
+    interface: 0.0.0.0
+
+    access-control: 192.168.83.0/24 allow
+    access-control: 0.0.0.0/0 refuse
+
+    hide-identity: yes
+    hide-version: yes
+
+    qname-minimisation: yes
+    prefetch: yes
+
+    harden-dnssec-stripped: yes
+
+    auto-trust-anchor-file: "/var/lib/unbound/root.key"
+```
+
+---
+
+```bash id="c6"
+sudo systemctl enable --now unbound
+sudo systemctl restart unbound
+```
+
+---
+
+```bash id="c7"
+sudo firewall-cmd --permanent --add-service=dns
+sudo firewall-cmd --reload
+```
+
+---
+
+# 🟡 STEP 5 — CLIENT CONFIG
+
+## 📍 RUN ON ALL CLIENT MACHINES
+
+```bash id="cl1"
+sudo nmcli con mod ens33 ipv4.dns "192.168.83.6 192.168.83.7"
+sudo nmcli con up ens33
+```
+
+---
+
+# 🧪 STEP 6 — TESTING (RUN FROM ANY CLIENT)
+
+```bash id="t1"
+dig vaibhav.com @192.168.83.6
+```
+
+```bash id="t2"
+dig google.com @192.168.83.6
+```
+
+```bash id="t3"
+dig +dnssec vaibhav.com @192.168.83.6
+```
+
+---
+
+# 🏁 FINAL RESULT
+
+✔ pri1 = Master DNS + DNSSEC signer
+✔ sec2 = Slave DNS replication
+✔ cache1/cache2 = Recursive secure resolvers
+✔ Clients → always use cache layer
+✔ SELinux enforced security
+✔ DNSSEC validated zone
+✔ Internal-only secure DNS network
+✔ Production ISP-grade DNS architecture (2026)
+
+---
+
+If you want next upgrade:
+
+🚀 Anycast DNS (global routing like Google/Cloudflare)
+🚀 Active-active DNS failover (VIP with keepalived)
+🚀 DNS attack protection (RPZ + rate limiting)
+🚀 Ansible automation (1-command full deployment)
+🚀 DNS over HTTPS (DoH) + TLS (DoT)
+🚀 Kubernetes CoreDNS integration
+
+Just tell 👍
+
