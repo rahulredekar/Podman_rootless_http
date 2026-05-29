@@ -1,0 +1,333 @@
+Here is your **FINAL CLEAN iSCSI PRODUCTION SETUP (2026 – RHEL 9/10 CORRECT + ENTERPRISE SAFE)** with **proper structure, server mapping, and corrected commands only**.
+
+---
+
+# 🏗️ FINAL iSCSI ARCHITECTURE
+
+```text
+iscsi-server (192.168.83.30)  → STORAGE TARGET (LUN EXPORT)
+iscsi-client (RHEL 9/10)      → INITIATOR (USES DISK)
+```
+
+✔ Block storage over network
+✔ Persistent mount
+✔ ACL-based access control
+✔ RHEL 9/10 compatible
+
+---
+
+# 🔵 STEP 1 — iSCSI SERVER (TARGET)
+
+## 📍 RUN ON: iscsi-server (192.168.83.30)
+
+---
+
+## 1. Install iSCSI target software
+
+```bash
+sudo dnf install targetcli -y
+```
+
+**Installs LIO iSCSI target management tool**
+
+---
+
+## 2. Enable iSCSI target service
+
+```bash
+sudo systemctl enable --now target
+```
+
+**Starts iSCSI target daemon**
+
+---
+
+## 3. Create storage backend (LUN)
+
+```bash
+sudo mkdir -p /iscsi
+sudo fallocate -l 10G /iscsi/disk1.img
+```
+
+**Creates a 10GB block storage file**
+
+---
+
+## 4. Configure iSCSI target
+
+```bash
+sudo targetcli
+```
+
+---
+
+Inside `targetcli`:
+
+### Create backstore
+
+```bash
+backstores/fileio create disk1 /iscsi/disk1.img 10G
+```
+
+**Defines storage disk**
+
+---
+
+### Create iSCSI target
+
+```bash
+iscsi/ create iqn.2026.com.vaibhav:storage1
+```
+
+**Creates iSCSI target name**
+
+---
+
+### Map LUN
+
+```bash
+cd iscsi/iqn.2026.com.vaibhav:storage1/tpg1/luns
+create /backstores/fileio/disk1
+```
+
+**Attaches disk to target**
+
+---
+
+### Allow client access (ACL)
+
+```bash
+cd ../acls
+create iqn.2026.com.vaibhav:client1
+```
+
+**Only this client can connect**
+
+---
+
+### Open portal
+
+```bash
+cd ../portals
+create 0.0.0.0 3260
+```
+
+**Listens on all interfaces**
+
+---
+
+### Save config
+
+```bash
+exit
+sudo targetctl saveconfig
+```
+
+---
+
+## 5. Firewall rule (SERVER)
+
+```bash
+sudo firewall-cmd --permanent --add-port=3260/tcp
+sudo firewall-cmd --reload
+```
+
+**Opens iSCSI port**
+
+---
+
+# 🔵 STEP 2 — iSCSI CLIENT (INITIATOR)
+
+## 📍 RUN ON: iscsi-client (RHEL 9/10)
+
+---
+
+## 1. Install initiator tools
+
+```bash
+sudo dnf install iscsi-initiator-utils -y
+```
+
+**Installs iSCSI client tools**
+
+---
+
+## 2. Set initiator IQN
+
+```bash
+sudo vim /etc/iscsi/initiatorname.iscsi
+```
+
+```conf
+InitiatorName=iqn.2026.com.vaibhav:client1
+```
+
+---
+
+## 3. Enable service
+
+```bash
+sudo systemctl enable --now iscsid
+```
+
+**Starts iSCSI daemon**
+
+---
+
+## 4. Discover storage
+
+```bash
+sudo iscsiadm -m discovery -t sendtargets -p 192.168.83.30
+```
+
+**Finds available iSCSI targets**
+
+---
+
+## 5. Login to target
+
+```bash
+sudo iscsiadm -m node -T iqn.2026.com.vaibhav:storage1 -p 192.168.83.30 --login
+```
+
+**Connects to remote disk**
+
+---
+
+## 6. Verify disk
+
+```bash
+lsblk
+```
+
+**New disk appears (e.g. /dev/sdb)**
+
+---
+
+## 7. Enable auto-login
+
+```bash
+sudo iscsiadm -m node -T iqn.2026.com.vaibhav:storage1 -p 192.168.83.30 \
+--op update -n node.startup -v automatic
+```
+
+---
+
+# 💾 STEP 3 — FORMAT & MOUNT (CLIENT)
+
+---
+
+## 1. Format disk
+
+```bash
+sudo mkfs.ext4 /dev/sdb
+```
+
+---
+
+## 2. Create mount point
+
+```bash
+sudo mkdir -p /iscsi-data
+```
+
+---
+
+## 3. Mount disk
+
+```bash
+sudo mount /dev/sdb /iscsi-data
+```
+
+---
+
+## 4. Make persistent mount
+
+```bash
+sudo blkid /dev/sdb
+```
+
+Add to fstab:
+
+```bash
+sudo vim /etc/fstab
+```
+
+```conf
+UUID=xxxx-xxxx  /iscsi-data  ext4  _netdev  0  0
+```
+
+**_netdev ensures network waits before mount**
+
+---
+
+# 🔥 STEP 4 — SECURITY HARDENING (IMPORTANT)
+
+## ON SERVER (BEST PRACTICE)
+
+✔ ACL already restricts access to:
+
+```text
+iqn.2026.com.vaibhav:client1
+```
+
+---
+
+## OPTIONAL HARDENING
+
+Inside `targetcli`:
+
+```bash
+set global auto_add_mapped_luns=false
+```
+
+**Prevents auto-exposure of LUNs**
+
+---
+
+# 🧪 STEP 5 — TESTING
+
+## On client:
+
+```bash
+iscsiadm -m session
+```
+
+```bash
+lsblk
+```
+
+```bash
+df -h
+```
+
+---
+
+# 🏁 FINAL RESULT
+
+✔ Secure iSCSI storage server
+✔ Block-level network disk access
+✔ ACL-restricted client authentication
+✔ Persistent mount across reboot
+✔ RHEL 9/10 production compatible
+✔ Enterprise SAN-style architecture
+
+---
+
+# 🚀 NEXT ENTERPRISE UPGRADES
+
+If you want to go further (real datacenter level):
+
+🔥 CHAP authentication (username/password security)
+🔥 Multipath iSCSI (failover + redundancy)
+🔥 iSCSI over VLAN isolation (network security)
+🔥 LVM on top of iSCSI (flexible storage)
+🔥 Ceph storage cluster (cloud-scale storage)
+
+---
+
+If you want next level setup, just tell:
+
+👉 **“CHAP secured iSCSI”**
+👉 **“HA iSCSI multipath setup”**
+👉 **“Ceph storage cluster design”**
